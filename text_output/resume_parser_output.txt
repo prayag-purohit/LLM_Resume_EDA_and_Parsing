@@ -1,0 +1,81 @@
+```json
+{
+  "experience": {
+    "total_years": 8,
+    "recent_positions": [
+      {
+        "title": "People and Capability Advisor",
+        "company": "TalentSphere Consulting (Novaterra)",
+        "dates": "July 2022 – Nov 2022",
+        "company_size": "medium"
+      },
+      {
+        "title": "Centre Manager",
+        "company": "XYZ University of Novaterra",
+        "dates": "Feb 2022 – June 2022",
+        "company_size": "large"
+      },
+      {
+        "title": "Human Resources Administrator",
+        "company": "XYZ University of Wellington (Novaterra)",
+        "dates": "July 2021 – Jan 2022",
+        "company_size": "large"
+      }
+    ],
+    "industry_sector": "Human Resources"
+  },
+  "education": {
+    "highest_degree": "Graduate Diploma",
+    "institutions": [
+      {
+        "name": "XYZ University of Wellington",
+        "is_prestigious": false
+      },
+      {
+        "name": "XYZ University of Novaterra",
+        "is_prestigious": false
+      },
+      {
+        "name": "Cassey University",
+        "is_prestigious": false
+      }
+    ],
+    "fields_of_study": [
+      "Human Resources and Employment Relations",
+      "Communication Management",
+      "Psychology and Philosophy",
+      "Business Studies"
+    ]
+  },
+  "skills": {
+    "technical": [
+      "SQL",
+      "Microsoft Office",
+      "Google Suite"
+    ],
+    "soft": [
+      "Change Management",
+      "Recruitment",
+      "Organizational Change",
+      "HR Process Improvement",
+      "Employee Experience & Wellbeing",
+      "Diversity & Inclusion",
+      "Interpersonal Communication",
+      "Time Management",
+      "Problem-solving",
+      "Leadership"
+    ],
+    "languages": []
+  },
+  "quality_scores": {
+    "overall": 7,
+    "experience": 7,
+    "education": 5,
+    "skills": 7
+  },
+  "background": {
+    "likely_home_country": "New Zealand",
+    "international_experience_ratio": 0.125
+  }
+}
+```

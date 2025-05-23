@@ -1,0 +1,17 @@
+2025-05-22 22:15:22,769 - __main__ - INFO - Attempting to upload file: HRC resume 10.pdf
+2025-05-22 22:15:23,301 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/upload/v1beta/files "HTTP/1.1 200 OK"
+2025-05-22 22:15:24,012 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/upload/v1beta/files?upload_id=AAO2VwqP906KqXE68s9W2qEDjC5VTCyLgAeTEw5DXS0VDi_aFk0UmVl0gDz9Wn13nLNi-FpAOmgY7TX3Yqa01fSwCza4ai3MM0FQMx_e3cYXmQ&upload_protocol=resumable "HTTP/1.1 200 OK"
+2025-05-22 22:15:24,014 - __main__ - INFO - Successfully uploaded file: files/oi2dy9llr30c - None
+2025-05-22 22:15:24,014 - __main__ - INFO - Successfully loaded prompt template from prompt_engineering_eda.md
+2025-05-22 22:15:24,018 - __main__ - INFO - Sending request to Gemini for content generation...
+2025-05-22 22:15:24,018 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-22 22:15:31,078 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-22 22:15:31,081 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-22 22:15:31,082 - __main__ - INFO - Content generation successful.
+2025-05-22 22:15:31,083 - __main__ - INFO - MongoDB URI: mongodb://localhost:27017/
+2025-05-22 22:15:31,117 - __main__ - INFO - Successfully connected to MongoDB.
+2025-05-22 22:15:31,120 - __main__ - INFO - Successfully saved data to MongoDB: files/oi2dy9llr30c
+2025-05-22 22:15:31,122 - __main__ - INFO - Closed MongoDB connection.
+2025-05-22 22:15:31,434 - httpx - INFO - HTTP Request: DELETE https://generativelanguage.googleapis.com/v1beta/files/oi2dy9llr30c "HTTP/1.1 200 OK"
+2025-05-22 22:15:31,436 - __main__ - INFO - SUCCESSS: Deleted uploaded file: files/oi2dy9llr30c
+2025-05-22 22:15:31,436 - __main__ - INFO - Gemini raw response received. Saving to resume_parser_output.txt for debugging.

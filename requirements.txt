@@ -1,0 +1,4 @@
+pymongo
+pandas
+google-genai
+dotenv
