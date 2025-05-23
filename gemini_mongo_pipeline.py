@@ -61,9 +61,9 @@ def _get_mongo_client():
         logger.error(f"Error connecting to MongoDB: {e}")
         return None   
 
-def _load_prompt_template():
-    """Load the EDA prompt template."""
-    prompt_path = "prompt_engineering_eda.md"
+def _load_prompt_template(file_path="prompt_engineering_eda.md"):
+    """Load a prompt template from md file. The prompt should be enclosed between triple backticks."""
+    prompt_path = file_path
     try:
         with open(prompt_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -84,12 +84,34 @@ def _load_prompt_template():
 
 # === Function to parse the resume using Gemini ===
 
-def analyze_resume_with_gemini(file_path="HRC resume 10.pdf"):
+def gemini_pipeline(prompt_file_path: str,
+                    file_path="HRC resume 10.pdf",
+                    google_search_tool: bool = False,
+                    think_tool: bool = False,
+                    model_name: str = "gemini-1.5-flash",
+                    temperature: float = 0.4,
+                    ):
+    """
+    This function is a wrapper for the Gemini pipeline.
+    It initializes the Gemini client, loads a prompt template *file*,
+    It has an option to upload a resume file, and enabling the Google Search tool.
+    sends a request to the Gemini model for content generation.
+    Saves logs, and stores text outputs in a dir
+
+    Args:
+        prompt_file_path (str/file_path): The prompt template file to use for the analysis. the prompt should be encolsed between "```"
+        file_path (str): The path to the resume file to be analyzed.
+        google_search_tool (bool): Whether to enable the Google Search tool.
+        think_tool (bool): Whether to enable the Think tool.
+        model_name (str): The name of the Gemini model to use.
+        temperature (float): The temperature setting for content generation.
+    """
     #model = _Gemini_init() # This didn't work lol
     load_dotenv()
     API_KEY = os.getenv("GEMINI_API_KEY")
     client = genai.Client(api_key=API_KEY)
     # Upload a resume file to Gemini
+
     if not os.path.exists(file_path):
         logger.error(f"Resume file not found: {file_path}")
         return None
@@ -98,16 +120,21 @@ def analyze_resume_with_gemini(file_path="HRC resume 10.pdf"):
     logger.info(f"Successfully uploaded file: {resume_document.name} - {resume_document.display_name}")
 
     # Initialize the Google GenAI client
-    
-    MODEL_NAME = "gemini-1.5-flash"
-    google_search_tool = types.Tool(google_search=types.GoogleSearch())
+
+    tools = []
+    if google_search_tool:
+        google_search_tool = types.Tool(google_search=types.GoogleSearch())
+        tools.append(google_search_tool)
+    if think_tool:
+        think_tool = types.Tool(think=types.Think())
+        tools.append(think_tool)
 
     # Initialize the prompt template
-    EDA_PROMPT_TEMPLATE = _load_prompt_template()
-    if not EDA_PROMPT_TEMPLATE:
+    PROMPT_TEMPLATE = _load_prompt_template(prompt_file_path)
+    if not PROMPT_TEMPLATE:
         logger.error("Failed to load prompt template. Aborting analysis.")
-        return None
-    prompt = EDA_PROMPT_TEMPLATE.replace("{resume_text}", "[SEE ATTACHED RESUME FILE]")
+        raise ValueError("Prompt template file is required for analysis. Make sure the file exists and the core prompt is enclosed between ```")
+    prompt = PROMPT_TEMPLATE
     
 
     # Sending request to Gemini
@@ -116,31 +143,33 @@ def analyze_resume_with_gemini(file_path="HRC resume 10.pdf"):
     try:
     # Adding caching mechanism here would be beneficial, i.e. using the cached prompt, and getting new document
         response = client.models.generate_content(
-            model=MODEL_NAME, 
+            model=model_name, 
             contents=[prompt, resume_document],
+            tools=tools,
             config=types.GenerateContentConfig(
                 temperature=0.4, 
                 ))
         
-    
-        
         raw_text = response.text
         logger.info("Content generation successful.")
-        save_to_mongodb(
-            llm_raw_text=raw_text,
-            llm_response=response, 
-            file_name=os.path.basename(file_path),
-            db_name="Resume_study", 
-            collection_name="EDA_data",
-            file_path=file_path
-        )
+
+        if raw_text is None:
+            logger.error("Gemini returned no text.")
+            # Clean up uploaded file
+        if resume_document:
+            try:
+                genai.delete_file(resume_document.name)
+                logger.info(f"Cleaned up uploaded file: {resume_document.name}")
+            except Exception as del_e:
+                logger.error(f"Error deleting uploaded file {resume_document.name}: {del_e}")
+            return None
         
         # Delete file after processed to save space on cloud
         client.files.delete(name=resume_document.name)
         logger.info(f"SUCCESSS: Deleted uploaded file: {resume_document.name}")
+        logger.info("Returning response")
+        return response
     
-
-
     except Exception as e:
         logger.error(f"Error during Gemini content generation: {e}")
         if hasattr(response, 'promptFeedback') and response.promptFeedback:
@@ -156,45 +185,21 @@ def analyze_resume_with_gemini(file_path="HRC resume 10.pdf"):
                 logger.error(f"Error deleting uploaded file {resume_document.name}: {del_e}")
         return None
 
+    finally:
+        logger.info("Gemini raw response received. Saving to resume_parser_output.txt for debugging.")
+        try:
+            # Ensure text_output directory exists
+            os.makedirs("text_output", exist_ok=True)
+            # Format timestamp as dd-mm-yy_HH-MM
+            timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            output_filename = f"{base_name}_{timestamp_str}.txt"
+            output_path = os.path.join("text_output", output_filename)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(raw_text)
+        except Exception as e_write:
+            logger.error(f"Error writing raw response to file: {e_write}")
 
-    if raw_text is None:
-        logger.error("Gemini returned no text.")
-        # Clean up uploaded file
-        if resume_document:
-            try:
-                genai.delete_file(resume_document.name)
-                logger.info(f"Cleaned up uploaded file: {resume_document.name}")
-            except Exception as del_e:
-                logger.error(f"Error deleting uploaded file {resume_document.name}: {del_e}")
-        return None
-
-    logger.info("Gemini raw response received. Saving to resume_parser_output.txt for debugging.")
-    try:
-        # Ensure text_output directory exists
-        os.makedirs("text_output", exist_ok=True)
-        # Format timestamp as dd-mm-yy_HH-MM
-        timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        output_filename = f"{base_name}_{timestamp_str}.txt"
-        output_path = os.path.join("text_output", output_filename)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(raw_text)
-    except Exception as e_write:
-        logger.error(f"Error writing raw response to file: {e_write}")
-
-
-# === Save to Excel ===
-
-def save_to_excel(data, excel_path="resume_eda_results.xlsx"):
-    try:
-        df = pd.DataFrame([data]) # Ensure data is in a list to be treated as a single row
-        if os.path.exists(excel_path):
-            existing_df = pd.read_excel(excel_path)
-            df = pd.concat([existing_df, df], ignore_index=True)
-        df.to_excel(excel_path, index=False)
-        logger.info(f"Successfully saved data to Excel: {excel_path}")
-    except Exception as e:
-        logger.error(f"Error saving to Excel: {e}")
 
 # === Save to MongoDB ===
 
@@ -203,8 +208,21 @@ def save_to_mongodb(llm_raw_text,
                     file_name: str,
                     db_name="Resume_study", 
                     collection_name="EDA_data",
-                    file_path="HRC resume 10.pdf",
+                    file_path="HRC resume 10.pdf"
+                    mongo_client = None,
                     ):
+    """
+    Save the LLM response to MongoDB.
+
+    Args:
+        llm_raw_text (str): The raw text response from the LLM.
+        llm_response: The LLM response object.
+        file_name (str): The name of the file being processed.
+        db_name (str): The MongoDB database name.
+        collection_name (str): The MongoDB collection name.
+        file_path (str): The path to the resume file being processed.
+        mongo_client: Provide a mongo_client if running inside a loop
+    """
     
     with open(file_path, "rb") as f:
         raw_file_bytes = f.read()
@@ -217,14 +235,20 @@ def save_to_mongodb(llm_raw_text,
     if llm_raw_text_clean.endswith("```"):
         llm_raw_text_clean = llm_raw_text_clean[:-3].strip()
     llm_raw_text_dict = json.loads(llm_raw_text_clean)
+    
+    if mongo_client is None:
+        mongo_client = _get_mongo_client()
+        close_client = True
+    else:
+        close_client = False
+         # Corrected: added ()
 
-    client = _get_mongo_client() # Corrected: added ()
-    if not client:
+    if not mongo_client:
         logger.error("Cannot save to MongoDB: Client not available.")
         return
 
     try:
-        db = client[db_name]
+        db = mongo_client[db_name]
         collection = db[collection_name]
         # Add a timestamp for when the record was created
         #collection.create_index("_id", unique=True)
@@ -256,24 +280,7 @@ def save_to_mongodb(llm_raw_text,
     except Exception as e:
         logger.error(f"MongoDB Error during save: {e}")
     finally:
-        if client:
-            client.close()
-            logger.info("Closed MongoDB connection.")
+        if close_client and mongo_client:
+            mongo_client.close()
+            logger.info("Closed MongoDB connection")
 
-
-# === Wrapper ===
-
-def run_eda_pipeline(file_path, save_excel=True, save_db=False):
-    logger.info(f"Starting EDA pipeline for resume: {file_path}")
-    result = analyze_resume_with_gemini(file_path)
-
-    if not result:
-        logger.error("Gemini parsing failed or returned no result. Pipeline halted.")
-        return
-
-    # Create a unique ID for the resume (optional, but good practice)
-    resume_id = os.path.splitext(os.path.basename(file_path))[0] # Removes extension
-    result["resume_id"] = resume_id
-    result["parsed_filename"] = os.path.basename(file_path)
-
-analyze_resume_with_gemini()
