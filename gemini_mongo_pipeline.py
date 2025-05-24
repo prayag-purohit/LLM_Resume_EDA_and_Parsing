@@ -13,32 +13,34 @@ import logging
 # Set up logging
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
-
+os.makedirs("logs/Errors", exist_ok=True)
 # Create a log file name that includes 'error' if any error occurs during runtime.
 # However, logging.basicConfig does not support dynamic renaming of log files after creation.
 # The log file name is set at startup and cannot be changed on error.
 # To separate error logs, use a separate FileHandler for errors.
 
-log_file_base = f"resume_parser{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-log_file_path = os.path.join("logs", log_file_base)
-error_log_file_path = os.path.join("logs", f"resume_parser_error{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+general_log = os.path.join("logs", f"resume_parser{ts}.log")
+error_log   = os.path.join("logs", "Errors", f"error_resume_parser{ts}.log")
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(log_file_path),
+        logging.FileHandler(general_log, mode="a"),
         logging.StreamHandler(),
-        logging.FileHandler(error_log_file_path, mode='a')
     ]
 )
 
-# Set error handler to only log errors and above
-for handler in logging.getLogger().handlers:
-    if isinstance(handler, logging.FileHandler) and handler.baseFilename == error_log_file_path:
-        handler.setLevel(logging.ERROR)
+# 4) Now add a second FileHandler for ERROR+ only:
+err_handler = logging.FileHandler(error_log, mode="a")
+err_handler.setLevel(logging.ERROR)
+err_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+
+logging.getLogger().addHandler(err_handler)
 
 logger = logging.getLogger(__name__)
+
 
 load_dotenv()
 
@@ -84,92 +86,72 @@ def _load_prompt_template(file_path="prompt_engineering_eda.md"):
 
 # === Function to parse the resume using Gemini ===
 
-def gemini_pipeline(prompt_file_path: str,
-                    file_path="HRC resume 10.pdf",
-                    google_search_tool: bool = False,
-                    think_tool: bool = False,
-                    model_name: str = "gemini-1.5-flash",
-                    temperature: float = 0.4,
-                    ):
+def _process_with_gemini(prompt_file_path: str, file_path: str, model_name: str, temperature: float, google_search_tool: bool):
     """
-    This function is a wrapper for the Gemini pipeline.
-    It initializes the Gemini client, loads a prompt template *file*,
-    It has an option to upload a resume file, and enabling the Google Search tool.
-    sends a request to the Gemini model for content generation.
-    Saves logs, and stores text outputs in a dir
-
+    Process a file with the Gemini API and return the response.
+    
     Args:
-        prompt_file_path (str/file_path): The prompt template file to use for the analysis. the prompt should be encolsed between "```"
+        prompt_file_path (str): The path to the prompt template file.
         file_path (str): The path to the resume file to be analyzed.
-        google_search_tool (bool): Whether to enable the Google Search tool.
-        think_tool (bool): Whether to enable the Think tool.
         model_name (str): The name of the Gemini model to use.
         temperature (float): The temperature setting for content generation.
+        google_search_tool (bool): Whether to enable the Google Search tool.
     """
-    #model = _Gemini_init() # This didn't work lol
-    load_dotenv()
-    API_KEY = os.getenv("GEMINI_API_KEY")
-    client = genai.Client(api_key=API_KEY)
-    # Upload a resume file to Gemini
 
     if not os.path.exists(file_path):
-        logger.error(f"Resume file not found: {file_path}")
+        logger.error(f"File not found: {file_path}")
         return None
-    logger.info(f"Attempting to upload file: {file_path}")
-    resume_document = client.files.upload(file=file_path)
-    logger.info(f"Successfully uploaded file: {resume_document.name} - {resume_document.display_name}")
 
-    # Initialize the Google GenAI client
-
+    API_KEY = os.getenv("GEMINI_API_KEY")
+    client = genai.Client(api_key=API_KEY)
+    
+    
+    try:
+        resume_document = client.files.upload(file=file_path)
+        logger.info(f"Successfully uploaded file: {resume_document.name} - {resume_document.display_name}")
+    except Exception as e:
+        logger.error(f"Error uploading file {file_path}: {e}")
+        return None
+    
     tools = []
     if google_search_tool:
-        google_search_tool = types.Tool(google_search=types.GoogleSearch())
-        tools.append(google_search_tool)
-    if think_tool:
-        think_tool = types.Tool(think=types.Think())
-        tools.append(think_tool)
+        tools.append(types.Tool(google_search=types.GoogleSearch()))
 
-    # Initialize the prompt template
+    
     PROMPT_TEMPLATE = _load_prompt_template(prompt_file_path)
     if not PROMPT_TEMPLATE:
         logger.error("Failed to load prompt template. Aborting analysis.")
         raise ValueError("Prompt template file is required for analysis. Make sure the file exists and the core prompt is enclosed between ```")
+    
     prompt = PROMPT_TEMPLATE
+    response = None
     
-
-    # Sending request to Gemini
-    logger.info("Sending request to Gemini for content generation...")
-    raw_text = None
     try:
-    # Adding caching mechanism here would be beneficial, i.e. using the cached prompt, and getting new document
         response = client.models.generate_content(
-            model=model_name, 
+            model=model_name,
             contents=[prompt, resume_document],
-            tools=tools,
             config=types.GenerateContentConfig(
-                temperature=0.4, 
-                ))
-        
-        raw_text = response.text
-        logger.info("Content generation successful.")
-
-        if raw_text is None:
-            logger.error("Gemini returned no text.")
-            # Clean up uploaded file
-        if resume_document:
+                temperature=temperature,
+                tools=tools
+                )
+        )
+        if response.text:
+            logger.info("Content generation successful.")
+            # Save raw response to file for debugging
             try:
-                genai.delete_file(resume_document.name)
-                logger.info(f"Cleaned up uploaded file: {resume_document.name}")
-            except Exception as del_e:
-                logger.error(f"Error deleting uploaded file {resume_document.name}: {del_e}")
+                os.makedirs("text_output", exist_ok=True)
+                timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
+                base_name = os.path.splitext(os.path.basename(file_path))[0]
+                output_filename = f"{base_name}_{timestamp_str}.txt"
+                output_path = os.path.join("text_output", output_filename)
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(response.text)
+            except Exception as e_write:
+                logger.error(f"Error writing raw response to file: {e_write}")
+            return response
+        else:
+            logger.error("Gemini returned no text.")
             return None
-        
-        # Delete file after processed to save space on cloud
-        client.files.delete(name=resume_document.name)
-        logger.info(f"SUCCESSS: Deleted uploaded file: {resume_document.name}")
-        logger.info("Returning response")
-        return response
-    
     except Exception as e:
         logger.error(f"Error during Gemini content generation: {e}")
         if hasattr(response, 'promptFeedback') and response.promptFeedback:
@@ -177,40 +159,28 @@ def gemini_pipeline(prompt_file_path: str,
             if hasattr(response, 'promptFeedback') and hasattr(response.promptFeedback, 'blockReason') and response.promptFeedback.blockReason:
                 logger.error(f"Block Reason: {response.promptFeedback.blockReason}")
         # Clean up uploaded file if generation fails and file exists
+        return None
+    
+    finally:
+        # Additional cleanup to ensure file is deleted even on success
         if resume_document:
             try:
                 client.files.delete(name=resume_document.name)
-                logger.info(f"Cleaned up uploaded file: {resume_document.name}")
-            except Exception as del_e:
-                logger.error(f"Error deleting uploaded file {resume_document.name}: {del_e}")
-        return None
-
-    finally:
-        logger.info("Gemini raw response received. Saving to resume_parser_output.txt for debugging.")
-        try:
-            # Ensure text_output directory exists
-            os.makedirs("text_output", exist_ok=True)
-            # Format timestamp as dd-mm-yy_HH-MM
-            timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            output_filename = f"{base_name}_{timestamp_str}.txt"
-            output_path = os.path.join("text_output", output_filename)
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(raw_text)
-        except Exception as e_write:
-            logger.error(f"Error writing raw response to file: {e_write}")
+                logger.info(f"Deleted uploaded file: {resume_document.name}")
+            except Exception as e:
+                logger.error(f"Error deleting uploaded file {resume_document.name}: {e}")
 
 
 # === Save to MongoDB ===
 
-def save_to_mongodb(llm_raw_text,
+def _save_to_mongodb(llm_raw_text,
                     llm_response, 
-                    file_name: str,
+                    file_name,
                     db_name="Resume_study", 
                     collection_name="EDA_data",
-                    file_path="HRC resume 10.pdf"
-                    mongo_client = None,
-                    ):
+                    file_path="HRC resume 10.pdf", #Default file for testing
+                    mongo_client= None,
+                    model_name=None):
     """
     Save the LLM response to MongoDB.
 
@@ -234,7 +204,15 @@ def save_to_mongodb(llm_raw_text,
         llm_raw_text_clean = llm_raw_text_clean[len("```"):].strip()
     if llm_raw_text_clean.endswith("```"):
         llm_raw_text_clean = llm_raw_text_clean[:-3].strip()
-    llm_raw_text_dict = json.loads(llm_raw_text_clean)
+    
+    try:
+        llm_raw_text_dict = json.loads(llm_raw_text_clean)
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse LLM response as JSON for {file_name}: {e}")
+        logger.debug(f"Problematic JSON string: {llm_raw_text_clean}")
+    # Decide how to handle: skip saving, save raw text in an error field, or raise
+        return ValueError(f"Invalid JSON format in LLM response for {file_name}. Please check the response format.")
     
     if mongo_client is None:
         mongo_client = _get_mongo_client()
@@ -263,7 +241,7 @@ def save_to_mongodb(llm_raw_text,
             **llm_raw_text_dict,
 
             # 3)LLM metadata
-            "model_name": llm_response.model_version,
+            "model_name": model_name,
             "usage_tokens": llm_response.usage_metadata.model_dump(
 	            include={
 		            "prompt_token_count",
@@ -284,3 +262,39 @@ def save_to_mongodb(llm_raw_text,
             mongo_client.close()
             logger.info("Closed MongoDB connection")
 
+
+
+# === Wrapper function ===
+def gemini_pipeline(prompt_file_path: str,
+                    file_path: str = "HRC resume 10.pdf",
+                    mongo_collection: str = None,
+                    mongo_db: str = None,
+                    google_search_tool: bool = False,
+                    think_tool: bool = False,
+                    model_name: str = "gemini-1.5-flash",
+                    temperature: float = 0.4,
+                    loop: bool = False
+                    ):
+    """
+    This function is a wrapper for the Gemini pipeline.
+    It processes a file using the Gemini API and optionally saves the results to MongoDB.
+
+    Args:
+        prompt_file_path (str): The path to the prompt template file.
+        file_path (str): The path to the resume file to be analyzed.
+        mongo_collection (str, optional): The MongoDB collection name to save the results.
+        mongo_db (str, optional): The MongoDB database name to save the results.
+        google_search_tool (bool): Whether to enable the Google Search tool.
+        think_tool (bool): Whether to enable the Think tool.
+        model_name (str): The name of the Gemini model to use.
+        temperature (float): The temperature setting for content generation.
+    """
+    response = _process_with_gemini(prompt_file_path, file_path, model_name, temperature, google_search_tool)
+    # 
+    if loop:
+        mongo_client = _get_mongo_client()
+    else:
+        mongo_client = None
+    if response and mongo_collection and mongo_db:
+        _save_to_mongodb(response.text, response, file_name=os.path.basename(file_path), db_name=mongo_db,model_name=model_name ,collection_name=mongo_collection, file_path=file_path, mongo_client=mongo_client)
+    return response
