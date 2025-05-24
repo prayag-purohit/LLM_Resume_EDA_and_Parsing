@@ -1,0 +1,212 @@
+```json
+{
+  "basics": {
+    "name": "Jane Doe",
+    "label": "Human Resources Generalist",
+    "image": "",
+    "email": "",
+    "phone": "",
+    "url": "",
+    "summary": "Professional, adaptable, and motivated Human Resource professional looking to utilise skills and experience in a People & Culture / Human Resources Advisor role.",
+    "location": {},
+    "profiles": []
+  },
+  "work": [
+    {
+      "name": "TalentSphere Consulting (Novaterra)",
+      "position": "People and Capability Advisor – fixed term",
+      "url": null,
+      "startDate": "2022-07-01",
+      "endDate": "2022-11-01",
+      "summary": null,
+      "highlights": [
+        "Led change management initiative – including collating and analysing data, preparing HR documentation and reports, and supporting the redundancy process.",
+        "Provided strategic advice to people leaders on HR processes and employment legislation, empowering leaders to manage their teams.",
+        "Coordinated HR administrative tasks, including file management, recruitment, on-boarding and offboarding.",
+        "Successfully met tight organisational change deadlines whilst maintaining work to a high standard resulting in a reduction over $1M of expenses for the organisation."
+      ]
+    },
+    {
+      "name": "XYZ University of Novaterra (Novaterra)",
+      "position": "Centre Manager – Labour, Employment and Work",
+      "url": null,
+      "startDate": "2022-02-01",
+      "endDate": "2022-06-01",
+      "summary": null,
+      "highlights": [
+        "Developed and maintained the Collective Agreements Database (SQL).",
+        "Managed of research assistants, including directing workload, assigning of tasks, monitoring performance as well as the recruiting, and training new staff.",
+        "Managed strategic events and activities.",
+        "Cultivated and maintained relationships with key stakeholders.",
+        "Managed budgets and operations for the centre’s grants and projects."
+      ]
+    },
+    {
+      "name": "XYZ University of Wellington (Novaterra)",
+      "position": "Human Resources Administrator – fixed term",
+      "url": null,
+      "startDate": "2021-07-01",
+      "endDate": "2022-01-01",
+      "summary": null,
+      "highlights": [
+        "Provided a ‘tier 1’ support and guidance on HR processes, systems, and work practices, with a customer centric approach.",
+        "Led recruitment including – writing/posting jobs vacancies online and managing application documents.",
+        "Prepared employment documents (e.g. certificates of service, adjunct request forms).",
+        "Successfully completed project-based work to assist with the HR transitional processes (e.g. digitising application form to gather EEO data)."
+      ]
+    },
+    {
+      "name": "Apex Consulting (Novaterra)",
+      "position": "Human Resources Administrator",
+      "url": null,
+      "startDate": "2020-12-01",
+      "endDate": "2021-06-01",
+      "summary": null,
+      "highlights": [
+        "Led recruitment including updating job descriptions, posting vacancies online, and managing application documents. Coordinated interviews and correspondence with candidates.",
+        "Conducted pre-employment checks of all new employees and volunteers.",
+        "Prepared employment documents including employment contracts, letter of offers, contract variations.",
+        "Managed the induction process for new employees.",
+        "Coordinated people and culture events/activities.",
+        "Organized monthly training events which increased employee engagement by 50%."
+      ]
+    },
+    {
+      "name": "Novaterra Education Institute -(Novaterra)",
+      "position": "Events Coordinator",
+      "url": null,
+      "startDate": "2018-04-01",
+      "endDate": "2020-03-01",
+      "summary": null,
+      "highlights": []
+    },
+    {
+      "name": "Media Design Institute (Novaterra)",
+      "position": "Domestic Student Recruitment and Events Manager",
+      "url": null,
+      "startDate": "2016-05-01",
+      "endDate": "2018-04-01",
+      "summary": null,
+      "highlights": []
+    },
+    {
+      "name": "Cassey University – School of Nursing home (Novaterra)",
+      "position": "Research and Programme Administrator",
+      "url": null,
+      "startDate": "2014-10-01",
+      "endDate": "2016-05-01",
+      "summary": null,
+      "highlights": []
+    },
+    {
+      "name": "GTA Travel (Novaterra)",
+      "position": "Travel Expert",
+      "url": null,
+      "startDate": "2014-01-01",
+      "endDate": "2014-10-01",
+      "summary": null,
+      "highlights": []
+    },
+    {
+      "name": "Roundabout (Dynamic Travel – Europe)",
+      "position": "On-board Tour Guide",
+      "url": null,
+      "startDate": "2012-04-01",
+      "endDate": "2013-10-01",
+      "summary": null,
+      "highlights": []
+    },
+    {
+      "name": "Cassey University – School of Psychology (Novaterra)",
+      "position": "Academic Administrator/Advisor",
+      "url": null,
+      "startDate": "2009-04-01",
+      "endDate": "2011-12-01",
+      "summary": null,
+      "highlights": []
+    }
+  ],
+  "volunteer": [],
+  "education": [
+    {
+      "institution": null,
+      "url": null,
+      "area": "Human Resources and Employment Relations",
+      "studyType": "Graduate Diploma of Commerce",
+      "startDate": null,
+      "endDate": null,
+      "score": null,
+      "courses": []
+    },
+    {
+      "institution": null,
+      "url": null,
+      "area": "Communication Management",
+      "studyType": "Graduate Diploma of Business Studies",
+      "startDate": null,
+      "endDate": null,
+      "score": null,
+      "courses": []
+    },
+    {
+      "institution": null,
+      "url": null,
+      "area": "Psychology and Philosophy",
+      "studyType": "Bachelor of Arts",
+      "startDate": null,
+      "endDate": null,
+      "score": null,
+      "courses": []
+    }
+  ],
+  "awards": [],
+  "certificates": [],
+  "publications": [],
+  "skills": [
+    {
+      "name": "Human Resources",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "Recruitment",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "Organizational Change",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "HR Process Improvement",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "Employee Experience & Wellbeing",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "Diversity & Inclusion",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "Microsoft Office",
+      "level": null,
+      "keywords": []
+    },
+    {
+      "name": "Google Suite",
+      "level": null,
+      "keywords": []
+    }
+  ],
+  "languages": [],
+  "interests": [],
+  "references": [],
+  "projects": []
+}
+```
