@@ -1,45 +1,69 @@
 import os
-from gemini_mongo_pipeline import gemini_pipeline
+import shutil
+from datetime import datetime
 from docx2pdf import convert
+import gemini_processor
+from mongodb import _save_to_mongodb
+import utils
 
-def local_file_loop(resume_dir: str = "Resume_inputs", prompt_file_path: str = "prompt_engineering_eda.md") -> None:
-    """
-    Loop through all the resume files in the specified directory and process them using the gemini_pipeline function.
-    This function assumes that the files are located in a directory named "Resume_inputs".
-    If the input is a .docx file, it converts it to .pdf before processing.
-    The processed files are moved to a directory named "Processed_resumes".
-    The original .docx files are moved to a subdirectory named "docx_converted_to_pdf".
-    """
-    resume_dir = "Resume_inputs"
+logger = utils.get_logger(__name__)
 
-    for filename in os.listdir(resume_dir):
-        file_path = os.path.join(resume_dir, filename)
-        if filename.endswith(".docx"):
-            # Convert .docx to .pdf
-            pdf_file_path = os.path.splitext(file_path)[0] + ".pdf"
-            convert(file_path, pdf_file_path)
-            # Move the original .docx to docx_converted_to_pdf directory
-            converted_dir = os.path.join(resume_dir, "base_docx_pre-conversion")
-            os.makedirs(converted_dir, exist_ok=True)
-            dest_docx_path = os.path.join(converted_dir, filename)
-            os.rename(file_path, dest_docx_path)
-            file_path = pdf_file_path  # Update file_path to the new PDF file path
-        if os.path.isfile(file_path):
-            gemini_pipeline(
-                prompt_file_path=prompt_file_path,
-                file_path=file_path,
-                mongo_collection="EDA_data",
-                mongo_db="Resume_study",
-                google_search_tool=False,
-                model_name="gemini-2.0-flash"
+gemini = gemini_processor.GeminiProcessor(
+    model_name="gemini-2.0-flash",
+    temperature=0.4,
+    api_key=os.getenv("GEMINI_API_KEY"),
+    enable_google_search=False,
+)
+
+def safe_move(src, dst):
+    if os.path.exists(dst):
+        base, ext = os.path.splitext(dst)
+        dst = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+    shutil.move(src, dst)
+    return dst
+
+def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engineering_eda.md"):
+    for filename in os.listdir(Loop_dir):
+        try:
+            file_path = os.path.join(Loop_dir, filename)
+            if not os.path.isfile(file_path):
+                continue
+
+            if filename.endswith(".docx"):
+                pdf_file_path = os.path.splitext(file_path)[0] + ".pdf"
+                convert(file_path, pdf_file_path)
+
+                archive_dir = os.path.join(Loop_dir, "base_docx_pre-conversion")
+                os.makedirs(archive_dir, exist_ok=True)
+                safe_move(file_path, os.path.join(archive_dir, filename))
+
+                file_path = pdf_file_path
+                processed_filename = os.path.basename(pdf_file_path)
+            else:
+                processed_filename = filename
+
+            logger.info(f"Processing {processed_filename}")
+            response = gemini.process_file(
+                prompt_template_path=prompt_template_path,
+                file_path=file_path
             )
-            # Move the processed file to Processed_resumes directory
+
             processed_dir = "Processed_resumes"
             os.makedirs(processed_dir, exist_ok=True)
-            dest_path = os.path.join(processed_dir, filename)
-            os.rename(file_path, dest_path)
+            dest_path = safe_move(file_path, os.path.join(processed_dir, processed_filename))
+
+            _save_to_mongodb(
+                llm_raw_text=response.text,
+                llm_response=response,
+                file_name=gemini.file_name,
+                file_path=dest_path,
+                db_name="Resume_study",
+                collection_name="Class_test",
+                model_name=gemini.model_name
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to process {filename}: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
-    local_file_loop(resume_dir="Resume_inputs", prompt_file_path="prompt_engineering_eda.md")
-    print("Processing completed.")
-
+    loop_local_files()

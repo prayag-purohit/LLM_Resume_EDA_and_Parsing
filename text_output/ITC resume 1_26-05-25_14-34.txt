@@ -1,10 +1,10 @@
 ```json
 {
   "candidate_summary": "A versatile Product Designer with 10+ years of experience creating data-driven, user-centered solutions for web and mobile platforms. Skilled at developing interactive prototypes with Figma to shape strategic direction and foster stakeholder alignment. Proven ability to harmonize user needs with business goals, delivering results like a 20% boost in user retention. Known for championing user-centric design principles within cross-functional teams and presenting actionable insights to C-suite leaders. Passionate about designing scalable, accessible, and visually compelling experiences that drive innovation and business success.",
-  "industry_sector": "Information Technology",
+  "industry_sector": "Design",
   "EDA": {
     "experience": {
-      "total_years": 11,
+      "total_years": 10,
       "recent_positions": [
         {
           "title": "Brand Identity Design (Volunteer)",
@@ -14,7 +14,7 @@
         },
         {
           "title": "UX/CX - User Experience, Customer Experience Manager",
-          "company": "Starlink, Clients: Ooredoo Telecom and Ministry of Communication and Information Technology",
+          "company": "Starlink",
           "dates": "March 2023-January 2024",
           "company_size": "large"
         },

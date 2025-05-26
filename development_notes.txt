@@ -1,10 +1,13 @@
-- Word docs currently aren't supported. A new branch may be created to solve this issue. 
-- One option is to extract text from word document,  and inject it within the prompt (easy to do), but
-- The code doesn't work without file upload, so we need to recode it to make file upload optional
+1) Word docs currently aren't supported. A new branch may be created to solve this issue. 
+- One option is to extract text from word document,  and inject it within the prompt (easy to do), but The code doesn't work without file upload, so we need to recode it to make file upload optional
 - Second option is to figure out how to upload doc files to gemini (better solution).
 
+1) Solved - converted word docx to pdf if the file name contians 'docx'. unsure if this would create problems
+
+
 - The prompt_engineering templates are not yet fully developed, I rely on the team's contribution to make them robust. The good thing is, we can just change the prompt template to make the code behave differently. meaning the codebase wouldn't need to be changed.  
-- It's easy to hit gemini API limits. So we have to do batch processing. 
+
+- It's easy to hit gemini API limits. So we have to do batch processing. meanning, we will divide sectors among ourselves, and host a common mongodb database
 - We need to find a way to have a common mongoDB database (sharing data amongst the team by hosting it on cloud)
 
 
@@ -12,3 +15,10 @@
 - This is a key technology. Create a new file if possible that could: 
     - Pick an element from mongoDB database
     - Uses a JSONresume project or a CLI tool to create a pdf from the JSON element.  
+
+
+- Problem: If in a loop, the logger, just creates one file. 
+- Problem: The logger creates error file, even if it is empty. 
+
+-------------------
+26-05 - I created a class based system, instead of a function based system. Leading to more readable code, and functions became simpler. The function based systems can be found in previous commits
