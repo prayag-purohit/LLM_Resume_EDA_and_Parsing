@@ -1,14 +1,15 @@
 import os
 import re
 from datetime import datetime
-import logging
+from utils import get_logger
 from typing import Optional, List
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
+# Set up logging
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class GeminiProcessor:
     """
@@ -37,7 +38,7 @@ class GeminiProcessor:
         self.temperature = temperature
         self._setup_api_client(api_key)
         self.tools = self._setup_tools(enable_google_search)
-        self.current_resume_file = None
+        self.uploaded_resume_file = None
         self.prompt_template = None
         
     def _setup_api_client(self, api_key: Optional[str]) -> None:
@@ -80,6 +81,9 @@ class GeminiProcessor:
                 return self.prompt_template
             else:
                 raise ValueError(f"Could not find prompt template (between ```) in {prompt_file_path}")
+        except FileNotFoundError:
+            logger.error(f"Prompt template file not found: {prompt_file_path}")
+            return None
         except Exception as e:
             logger.error(f"Error loading prompt template: {e}")
             raise
@@ -100,20 +104,20 @@ class GeminiProcessor:
 
         try:
             self.file_name = os.path.splitext(os.path.basename(document_path))[0]
-            self.current_resume_file = self.client.files.upload(file=document_path)
-            logger.info(f"Successfully uploaded file: {self.current_resume_file.name}")
-            return self.current_resume_file
+            self.uploaded_resume_file = self.client.files.upload(file=document_path)
+            logger.info(f"Successfully uploaded file: {self.uploaded_resume_file.name}")
+            return self.uploaded_resume_file
         except Exception as e:
             logger.error(f"Error uploading file {document_path}: {e}")
             raise
     
     def delete_uploaded_file(self) -> None:
         """Delete the currently uploaded file."""
-        if self.current_resume_file:
+        if self.uploaded_resume_file:
             try:
-                self.client.files.delete(name=self.current_resume_file.name)
-                logger.info(f"Deleted uploaded file: {self.current_resume_file.name}")
-                self.current_resume_file = None
+                self.client.files.delete(name=self.uploaded_resume_file.name)
+                logger.info(f"Deleted uploaded file: {self.uploaded_resume_file.name}")
+                self.uploaded_resume_file = None
             except Exception as e:
                 logger.error(f"Error deleting uploaded file: {e}")
                 raise
@@ -128,7 +132,7 @@ class GeminiProcessor:
         Returns:
             types.GenerateContentResponse: The generated content
         """
-        if not self.current_resume_file:
+        if not self.uploaded_resume_file:
             raise ValueError("No file has been uploaded")
             
         if prompt is None:
@@ -139,7 +143,7 @@ class GeminiProcessor:
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=[prompt, self.current_resume_file],
+                contents=[prompt, self.uploaded_resume_file],
                 config=types.GenerateContentConfig(
                     temperature=self.temperature,
                     tools=self.tools
@@ -156,34 +160,12 @@ class GeminiProcessor:
             logger.error(f"Error during content generation: {e}")
             if hasattr(response, 'promptFeedback') and response.promptFeedback:
                 logger.error(f"Prompt Feedback: {response.promptFeedback}")
-            raise
+                if hasattr(response, 'promptFeedback') and hasattr(response.promptFeedback, 'blockReason') and response.promptFeedback.blockReason:
+                    logger.error(f"Block Reason: {response.promptFeedback.blockReason}")
         finally:
             # Cleanup uploaded file
             self.delete_uploaded_file()
     
-    def process_file(self, file_path: str, prompt_template_path: str) -> types.GenerateContentResponse:
-        """
-        Process a file using a prompt template. This is a convenience method that combines
-        loading the template, uploading the file, and generating content.
-        
-        Args:
-            file_path (str): Path to the file to process
-            prompt_template_path (str): Path to the prompt template file
-            
-        Returns:
-            types.GenerateContentResponse: The generated content
-        """
-        try:
-            self.load_prompt_template(prompt_template_path)
-            self.upload_file(file_path)
-            return self.generate_content()
-        except Exception as e:
-            logger.error(f"Error processing file: {e}")
-            raise
-        finally:
-            if self.current_resume_file:
-                self.delete_uploaded_file()
-
     def save_generated_content(self, response: types.GenerateContentResponse, output_path: str) -> None:
         """
         Save the generated content to a file.
@@ -212,3 +194,31 @@ class GeminiProcessor:
         else:
             logger.error("Gemini returned no text.")
             return None
+    
+    def process_file(self, file_path: str, prompt_template_path: str) -> types.GenerateContentResponse:
+        """
+        Process a file using a prompt template. This is a convenience method that combines
+        loading the template, uploading the file, and generating content.
+        
+        Args:
+            file_path (str): Path to the file to process
+            prompt_template_path (str): Path to the prompt template file
+            
+        Returns:
+            types.GenerateContentResponse: The generated content
+        """
+        try:
+            self.load_prompt_template(prompt_template_path)
+            self.upload_file(file_path)
+            output_file_path = os.path.join("text_output", f"{self.file_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+            response = self.generate_content()
+            self.save_generated_content(output_path=output_file_path, response=response)
+            return response
+        except Exception as e:
+            logger.error(f"Error processing file: {e}")
+            raise ValueError(f"Failed to process file {file_path}: {e}")
+        finally:
+            if self.uploaded_resume_file:
+                self.delete_uploaded_file()
+
+
