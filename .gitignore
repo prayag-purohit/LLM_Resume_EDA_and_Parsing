@@ -1,0 +1,8 @@
+.venv
+.env
+logs/
+__pycache__/
+Resume_inputs/
+text_outputs/
+Processed_resumes/
+Jupyternotebooks/

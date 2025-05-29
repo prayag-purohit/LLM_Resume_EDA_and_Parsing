@@ -1,0 +1,117 @@
+{
+  "_id": {
+    "$oid": "682fda43399de7629a417cc0"
+  },
+  "file_id": "files/oi2dy9llr30c",
+  "file_size_bytes": 301769,
+  "file_hash": "42e64b98971257588e13e9986a3bc2663feb09a0cce96be64509b45bc220e533",
+  "candidate_summary": "Jane Doe is a highly motivated and adaptable Human Resources professional with over 6 years of progressive experience in various HR roles.  Her expertise spans recruitment, organizational change, HR process improvement, employee wellbeing, and diversity & inclusion.  She possesses a Bachelor's degree in Philosophy and Psychology, along with Graduate Diplomas in Human Resources and Communication Management.  Her experience includes managing teams, leading change initiatives, handling HR administration, and successfully delivering projects under tight deadlines.  Jane is proficient in Microsoft Office and Google Suite and demonstrates strong communication, interpersonal, and time-management skills. She is seeking a People & Culture/Human Resources Advisor role to leverage her skills and experience.",
+  "industry_sector": "Human Resources",
+  "EDA": {
+    "experience": {
+      "total_years": 6,
+      "recent_positions": [
+        {
+          "title": "People and Capability Advisor",
+          "company": "TalentSphere Consulting (Novaterra)",
+          "dates": "July 2022 – Nov 2022",
+          "company_size": "medium"
+        },
+        {
+          "title": "Centre Manager",
+          "company": "XYZ University of Novaterra",
+          "dates": "Feb 2022 – June 2022",
+          "company_size": "large"
+        },
+        {
+          "title": "Human Resources Administrator",
+          "company": "XYZ University of Wellington (Novaterra)",
+          "dates": "July 2021 – Jan 2022",
+          "company_size": "large"
+        }
+      ]
+    },
+    "education": {
+      "highest_degree": "Graduate Diploma",
+      "institutions": [
+        {
+          "name": "XYZ University of Wellington",
+          "is_prestigious": false,
+          "national_ranking": null
+        },
+        {
+          "name": "XYZ University of Novaterra",
+          "is_prestigious": false,
+          "national_ranking": null
+        },
+        {
+          "name": "Cassey University",
+          "is_prestigious": false,
+          "national_ranking": null
+        },
+        {
+          "name": "Apex Consulting",
+          "is_prestigious": false,
+          "national_ranking": null
+        }
+      ],
+      "fields_of_study": [
+        "Human Resources",
+        "Employment Relations",
+        "Communication Management",
+        "Psychology",
+        "Philosophy"
+      ]
+    },
+    "skills": {
+      "technical": [
+        "Microsoft Office",
+        "Google Suite",
+        "SQL"
+      ],
+      "soft": [
+        "Change Management",
+        "Recruitment",
+        "HR Process Improvement",
+        "Employee Relations",
+        "Team Management",
+        "Communication",
+        "Interpersonal Skills",
+        "Time Management",
+        "Problem-solving",
+        "Leadership"
+      ],
+      "languages": []
+    },
+    "quality_scores": {
+      "overall": 7,
+      "experience": 7,
+      "education": 6,
+      "skills": 7
+    },
+    "background": {
+      "likely_home_country": "New Zealand",
+      "international_experience_ratio": 0.16
+    }
+  },
+  "model_name": "gemini-1.5-flash",
+  "usage_tokens": {
+    "prompt_token_count": 1552,
+    "prompt_tokens_details": [
+      {
+        "modality": "DOCUMENT",
+        "token_count": 774
+      },
+      {
+        "modality": "TEXT",
+        "token_count": 778
+      }
+    ],
+    "thoughts_token_count": null,
+    "tool_use_prompt_tokens_details": null,
+    "total_token_count": 2330
+  },
+  "timestamp": {
+    "$date": "2025-05-22T22:15:31.118Z"
+  }
+}
