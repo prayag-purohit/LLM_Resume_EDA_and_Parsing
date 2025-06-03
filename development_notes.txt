@@ -1,24 +1,70 @@
-1) Word docs currently aren't supported. A new branch may be created to solve this issue. 
-- One option is to extract text from word document,  and inject it within the prompt (easy to do), but The code doesn't work without file upload, so we need to recode it to make file upload optional
-- Second option is to figure out how to upload doc files to gemini (better solution).
+CURRENT ISSUES AND STATUS UPDATES
 
-1) Solved - converted word docx to pdf if the file name contians 'docx'. unsure if this would create problems
+1)    Word Document Support
 
+        Word documents (.docx) are currently not supported.
 
-- The prompt_engineering templates are not yet fully developed, I rely on the team's contribution to make them robust. The good thing is, we can just change the prompt template to make the code behave differently. meaning the codebase wouldn't need to be changed.  
+        Two possible solutions:
+        a) Extract text from .docx and inject it into the prompt (easy to do), but the current code depends on file upload, so we’ll need to refactor it to make file upload optional.
+        b) Find a way to upload .docx files directly to Gemini (better long-term solution).
 
-- It's easy to hit gemini API limits. So we have to do batch processing. meanning, we will divide sectors among ourselves, and host a common mongodb database
-- We need to find a way to have a common mongoDB database (sharing data amongst the team by hosting it on cloud)
+        Status: Solved temporarily by converting .docx files to PDF if the filename contains “docx.” However, we’re unsure if this may cause any issues later.
+        This was solved using docx2pdf converter
 
+2)    Prompt Engineering Templates
 
-- We have to test the JSONresume pipeline so that we can show Jeremy that we can create pretty resumes from text without much effort. 
-- This is a key technology. Create a new file if possible that could: 
-    - Pick an element from mongoDB database
-    - Uses a JSONresume project or a CLI tool to create a pdf from the JSON element.  
+        The templates are not fully developed and need team input to make them robust.
 
+        The benefit is that the prompt templates can be changed without modifying the core code.
 
-- Problem: If in a loop, the logger, just creates one file. 
-- Problem: The logger creates error file, even if it is empty. 
+        Hitting Gemini API limits is easy, so we’ll need to batch the data by sector and assign them among team members.
 
--------------------
-26-05 - I created a class based system, instead of a function based system. Leading to more readable code, and functions became simpler. The function based systems can be found in previous commits
+        We’ll all use the same MongoDB database to store results.
+
+3)    Shared MongoDB Database
+
+        We needed a way to share data across the team.
+
+        Status: Solved using MongoDB Atlas (free tier, up to 512 MB). Everyone has access.
+
+4)   JSONResume Pipeline Testing
+
+        We need to show Jeremy that we can generate good-looking resumes from text.
+
+        The goal is to:
+
+            Fetch a document from MongoDB
+
+            Use a JSONResume theme/tool to convert that JSON into a PDF
+
+        Status: Initial version done on June 3. The resumed_exported module handles this.
+
+5)    Theme Testing and Logging Issues (continuation of 4.)
+
+        Two themes tested so far gave disappointing results. Need to test more or customize.
+
+6)     Logging issues:
+
+            When run in a loop, the logger only creates one log file.
+
+            It always creates an error log file, even if there’s no error.
+
+        Next step: Improve logger to create separate log files for each run and avoid empty error logs.
+
+DEVELOPMENT MILESTONES
+
+    May 26
+
+        Refactored the codebase to use classes instead of functions. This improved readability and made each function simpler. Older function-based code is still in previous commits.
+
+    May 29
+
+        Created a module to pull data from MongoDB. Includes:
+
+            A function to get all documents in a collection as a Python list.
+
+            A loop to process each document from that list.
+
+    June 3
+
+        Created the resumed_exported module. This converts MongoDB documents into PDF resumes using JSONResume themes.
