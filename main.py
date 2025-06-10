@@ -8,7 +8,6 @@ import utils
 
 logger = utils.get_logger(__name__)
 
-mongo_client = _get_mongo_client()
 gemini = gemini_processor.GeminiProcessor(
     model_name="gemini-2.0-flash",
     temperature=0.4,
@@ -23,7 +22,19 @@ def safe_move(src, dst):
     shutil.move(src, dst)
     return dst
 
-def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engineering_eda.md", collection_name="EDA_data"):
+def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engineering_eda.md", collection_name="EDA_data", db_name="Resume_study"):
+    """
+    Loop through local files in a specified directory, process them with Gemini, with specified prompts, and save the results to MongoDB.
+    This function handles both .docx and .pdf files. If a .docx file is found, it converts it to .pdf before processing.
+
+    Args:
+        Loop_dir (str): Directory containing the files to process.
+        prompt_template_path (str): Path to the prompt template file.
+        collection_name (str): Name of the MongoDB collection to save results.
+        db_name (str): Name of the MongoDB database to use.
+    
+    """
+    mongo_client = _get_mongo_client()
     for filename in os.listdir(Loop_dir):
         try:
             file_path = os.path.join(Loop_dir, filename)
@@ -57,8 +68,9 @@ def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engi
                 llm_raw_text=response.text,
                 llm_response=response,
                 file_name=gemini.file_name,
+                industry_prefix=gemini.industry_prefix,
                 file_path=dest_path,
-                db_name="Resume_study",
+                db_name=db_name,
                 collection_name=collection_name,
                 model_name=gemini.model_name,
                 mongo_client=mongo_client
@@ -70,5 +82,5 @@ def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engi
 if __name__ == "__main__":
     loop_local_files(
         Loop_dir="Resume_inputs",
-        prompt_template_path="prompt_engineering_parsing.md",
+        prompt_template_path="Prompt_templates\prompt_engineering_parsing.md",
         collection_name="JSON_raw")

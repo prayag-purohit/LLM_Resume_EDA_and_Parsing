@@ -7,3 +7,5 @@ text_outputs/
 Processed_resumes/
 Jupyternotebooks/
 Exported_resumes/
+.vscode/
+text_output/

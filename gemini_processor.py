@@ -104,6 +104,7 @@ class GeminiProcessor:
 
         try:
             self.file_name = os.path.splitext(os.path.basename(document_path))[0]
+            self.industry_prefix = self.file_name.split(" ")[0] if " " in self.file_name else "default"
             self.uploaded_resume_file = self.client.files.upload(file=document_path)
             logger.info(f"Successfully uploaded file: {self.uploaded_resume_file.name}")
             return self.uploaded_resume_file
@@ -184,6 +185,7 @@ class GeminiProcessor:
                 os.makedirs("text_output", exist_ok=True)
                 timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
                 base_name = os.path.splitext(os.path.basename(self.file_name))[0]
+                
                 output_filename = f"{base_name}_{timestamp_str}.txt"
                 output_path = os.path.join("text_output", output_filename)
                 with open(output_path, "w", encoding="utf-8") as f:

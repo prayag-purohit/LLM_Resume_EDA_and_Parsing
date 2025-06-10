@@ -32,11 +32,14 @@ def _get_mongo_client():
 
 
 # === Save to MongoDB ===
-
+# In this function, we are passing a bunch of shit, llm_raw_text, response, file_name, and prefix.
+# These four things are attributes of the gemini class. So in theory we could just pass the gemini object, and it would still work.
+# We do this so that we remember what is being saved in MongoDB
 def save_LLM_response_to_mongodb(
                     llm_raw_text,
                     llm_response, 
                     file_name,
+                    industry_prefix,
                     db_name="Resume_study", 
                     collection_name="EDA_data",
                     file_path="HRC resume 10.pdf", #Default file for testing
@@ -49,6 +52,7 @@ def save_LLM_response_to_mongodb(
         llm_raw_text (str): The raw text response from the LLM.
         llm_response: The LLM response object.
         file_name (str): The name of the file being processed.
+        industry_prefix (str): The industry prefix for the file.
         db_name (str): The MongoDB database name.
         collection_name (str): The MongoDB collection name.
         file_path (str): The path to the resume file being processed.
@@ -98,7 +102,7 @@ def save_LLM_response_to_mongodb(
             # 2)File metadata
             "file_size_bytes": len(raw_file_bytes),
             "file_hash": hashlib.sha256(raw_file_bytes).hexdigest(),
-
+            "industry_prefix": industry_prefix,
             **llm_raw_text_dict,
 
             # 3)LLM metadata
@@ -201,13 +205,5 @@ def get_document_by_fileid(db_name:str,
 
 
 #Testing
-if __name__ == "__main__":
-    file_id_list=['DMC Resume 1', 'DMC Resume 2', 'DMC Resume 3', 'DMC Resume 4', 'DMC Resume 5']
-    doc_one = get_document_by_fileid(
-        db_name="Resume_study", 
-        collection_name="JSON_raw", 
-        file_id=file_id_list[0], 
-    )
-    # MongoDB directly returns a json object, so we can print and manipulate it directly.
-    print(type(doc_one))
-    print(doc_one["JSON_Resume"])
+#if __name__ == "__main__":
+
