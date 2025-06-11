@@ -68,3 +68,12 @@ DEVELOPMENT MILESTONES
     June 3
 
         Created the resumed_exported module. This converts MongoDB documents into PDF resumes using JSONResume themes.
+
+    June 11 
+        
+        Created a two pass model, meaning one file can be uploaded, and two models with different config, and different prompts can run through the same file
+        - For example, one more powerful model can take EDA task, while other smaller model can take up the flagging for cleaning task
+        - For this to happen I had to create a dynamic MONGO_SCHEMA stored in the folder by the same name. the mongodb module was updated for this.
+        - All the modules were moved to PYTHON_MODULES folder
+        - Added a feature that let's us use either the production database hosted remotely, or local one for testing.
+        

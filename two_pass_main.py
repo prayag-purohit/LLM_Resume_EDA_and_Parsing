@@ -2,11 +2,11 @@ import os
 import shutil
 from datetime import datetime
 from docx2pdf import convert
-import gemini_processor
-from mongodb import save_document_from_template, _get_mongo_client, _parse_llm_text_to_dict
+import PYTHON_MODULES.gemini_processor as gemini_processor
+from PYTHON_MODULES.mongodb import save_document_from_template, _get_mongo_client, _parse_llm_text_to_dict
 import hashlib
 from dotenv import load_dotenv
-import utils
+import PYTHON_MODULES.utils as utils
 import json
 
 logger = utils.get_logger(__name__)
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         loop_dir = "Resume_inputs",
         flag_prompt_path = "Prompt_templates\prompt_engineering_flagforcleaning.md",
         eda_prompt_path = "Prompt_templates\prompt_engineering_eda.md",
-        schema_path = "mongo_schema_two_pass.json",
+        schema_path = "MONGO_SCHEMA\mongo_schema_two_pass.json",
         collection_name = "EDA_devtest",
         db_name = "Testing"
     )

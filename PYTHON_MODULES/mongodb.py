@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from datetime import datetime
 import hashlib
 from dotenv import load_dotenv
-from utils import get_logger
+from PYTHON_MODULES.utils import get_logger
 
 logger = get_logger(__name__)
 

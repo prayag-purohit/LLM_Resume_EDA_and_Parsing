@@ -1,7 +1,7 @@
 import os
 import re
 from datetime import datetime
-from utils import get_logger
+from PYTHON_MODULES.utils import get_logger
 from typing import Optional, List
 from google import genai
 from google.genai import types
