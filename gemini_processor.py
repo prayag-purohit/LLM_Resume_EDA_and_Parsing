@@ -163,9 +163,6 @@ class GeminiProcessor:
                 logger.error(f"Prompt Feedback: {response.promptFeedback}")
                 if hasattr(response, 'promptFeedback') and hasattr(response.promptFeedback, 'blockReason') and response.promptFeedback.blockReason:
                     logger.error(f"Block Reason: {response.promptFeedback.blockReason}")
-        finally:
-            # Cleanup uploaded file
-            self.delete_uploaded_file()
     
     def save_generated_content(self, response: types.GenerateContentResponse, output_path: str) -> None:
         """
@@ -219,8 +216,6 @@ class GeminiProcessor:
         except Exception as e:
             logger.error(f"Error processing file: {e}")
             raise ValueError(f"Failed to process file {file_path}: {e}")
-        finally:
-            if self.uploaded_resume_file:
-                self.delete_uploaded_file()
+
 
 

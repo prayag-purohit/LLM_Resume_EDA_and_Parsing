@@ -10,11 +10,20 @@ logger = get_logger(__name__)
 
 load_dotenv()
 
-
 # === Setup ===
 
-def _get_mongo_client():
-    mongo_uri = os.getenv("MONGODB_URI")
+def _get_mongo_client(Prod: bool = False) -> MongoClient:
+    """
+    Create and return a MongoDB client based on the environment variable MONGODB_URI and MONGODB_PROD.
+    Defaults to the Local URI if Prod is False.
+
+    Args:
+        Prod (bool): If True, use the production MongoDB URI; otherwise, use the development URI.
+    """
+    if Prod:
+        mongo_uri = os.getenv("MONGODB_PROD_URI")
+    else:
+        mongo_uri = os.getenv("MONGODB_LOCAL_URI")
     logger.info(f"MongoDB URI: {mongo_uri}")
     if not mongo_uri:
         logger.error("Error: MongoDB URI is required (MONGO_URI environment variable).")
@@ -29,39 +38,7 @@ def _get_mongo_client():
         logger.error(f"Error connecting to MongoDB: {e}")
         return None   
 
-
-
-# === Save to MongoDB ===
-# In this function, we are passing a bunch of shit, llm_raw_text, response, file_name, and prefix.
-# These four things are attributes of the gemini class. So in theory we could just pass the gemini object, and it would still work.
-# We do this so that we remember what is being saved in MongoDB
-def save_LLM_response_to_mongodb(
-                    llm_raw_text,
-                    llm_response, 
-                    file_name,
-                    industry_prefix,
-                    db_name="Resume_study", 
-                    collection_name="EDA_data",
-                    file_path="HRC resume 10.pdf", #Default file for testing
-                    mongo_client= None, # Provide a mongo_client if running inside a loop
-                    model_name=None):
-    """
-    Save the LLM response to MongoDB.
-
-    Args:
-        llm_raw_text (str): The raw text response from the LLM.
-        llm_response: The LLM response object.
-        file_name (str): The name of the file being processed.
-        industry_prefix (str): The industry prefix for the file.
-        db_name (str): The MongoDB database name.
-        collection_name (str): The MongoDB collection name.
-        file_path (str): The path to the resume file being processed.
-        mongo_client: Provide a mongo_client if running inside a loop
-    """
-    
-    with open(file_path, "rb") as f:
-        raw_file_bytes = f.read()
-    
+def _parse_llm_text_to_dict(llm_raw_text: str, file_name: str):
     llm_raw_text_clean = llm_raw_text.strip()
     if llm_raw_text_clean.startswith("```json"):
         llm_raw_text_clean = llm_raw_text_clean[len("```json"):].strip()
@@ -72,19 +49,52 @@ def save_LLM_response_to_mongodb(
     
     try:
         llm_raw_text_dict = json.loads(llm_raw_text_clean)
-
+        return llm_raw_text_dict
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse LLM response as JSON for {file_name}: {e}")
         logger.debug(f"Problematic JSON string: {llm_raw_text_clean}")
     # Decide how to handle: skip saving, save raw text in an error field, or raise
         return ValueError(f"Invalid JSON format in LLM response for {file_name}. Please check the response format.")
-    
+
+def _build_document(template: dict, data_sources: dict) -> dict:
+    """
+    Recursively builds a document by populating a template with data sources.
+    """
+    doc = {}
+    for key, value in template.items():
+        if isinstance(key, str) and key.startswith("$unpack"):
+            # This is our special key. The value is the name of the data source to unpack.
+            source_name = value
+            if source_name in data_sources and isinstance(data_sources[source_name], dict):
+                doc.update(data_sources[source_name])
+        elif isinstance(value, str) and value.startswith("{{") and value.endswith("}}"):
+            # This is a placeholder like "{{file_id}}".
+            placeholder = value[2:-2]
+            if placeholder in data_sources:
+                doc[key] = data_sources[placeholder]
+        elif isinstance(value, dict):
+            # Recursively build sub-documents
+            doc[key] = _build_document(value, data_sources)
+        else:
+            # This is a static value from the template
+            doc[key] = value
+    return doc
+
+# === Save to MongoDB ===
+def save_document_from_template(
+                    schema_template: dict,
+                    data_sources: dict,
+                    db_name="Resume_study",
+                    collection_name="EDA_data",
+                    mongo_client=None):
+    """
+    Saves a document to MongoDB based on a schema template and a dictionary of data sources.
+    """
     if mongo_client is None:
         mongo_client = _get_mongo_client()
         close_client = True
     else:
         close_client = False
-         # Corrected: added ()
 
     if not mongo_client:
         logger.error("Cannot save to MongoDB: Client not available.")
@@ -93,39 +103,22 @@ def save_LLM_response_to_mongodb(
     try:
         db = mongo_client[db_name]
         collection = db[collection_name]
-        # Add a timestamp for when the record was created
-        #collection.create_index("_id", unique=True)
 
-        doc = {
-            # 1)Primary key
-            "file_id": file_name,
-            # 2)File metadata
-            "file_size_bytes": len(raw_file_bytes),
-            "file_hash": hashlib.sha256(raw_file_bytes).hexdigest(),
-            "industry_prefix": industry_prefix,
-            **llm_raw_text_dict,
+        # Build the final document using our helper function
+        doc_to_insert = _build_document(schema_template, data_sources)
 
-            # 3)LLM metadata
-            "model_name": model_name,
-            "usage_tokens": llm_response.usage_metadata.model_dump(
-	            include={
-		            "prompt_token_count",
-                    "prompt_tokens_details",
-                    "thoughts_token_count",
-                    "tool_use_prompt_tokens_details",
-                    "total_token_count"}),
-            
-            "timestamp": datetime.now(),
-        }
-        collection.insert_one(doc)
-        logger.info(f"Successfully saved data to MongoDB: {file_name}")
+        collection.insert_one(doc_to_insert)
+        file_id = data_sources.get("file_id", "Unknown")
+        logger.info(f"Successfully saved document to MongoDB for: {file_id}")
 
     except Exception as e:
         logger.error(f"MongoDB Error during save: {e}")
     finally:
         if close_client and mongo_client:
             mongo_client.close()
-            logger.info("Closed MongoDB connection")
+
+
+
 
 # === Retrieve from MongoDB ===
 

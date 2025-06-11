@@ -1,0 +1,11 @@
+{
+  "file_id": "{{file_id}}",
+  "file_size_bytes": "{{file_size_bytes}}",
+  "file_hash": "{{file_hash}}",
+  "industry_prefix": "{{industry_prefix}}",
+  "$unpack_eda": "eda_data",
+  "llm_metadata": {
+    "models": "{{models_data}}"
+  },
+  "timestamp": "{{timestamp}}"
+}
