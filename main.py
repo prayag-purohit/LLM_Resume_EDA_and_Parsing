@@ -2,11 +2,11 @@ import os
 import shutil
 from datetime import datetime
 from docx2pdf import convert
-import gemini_processor
-from mongodb import save_LLM_response_to_mongodb, _get_mongo_client
-import utils
+import libs.gemini_processor as gemini_processor
+from libs.mongodb import save_LLM_response_to_mongodb, _get_mongo_client
+from utils import get_logger
 
-logger = utils.get_logger(__name__)
+logger = get_logger(__name__)
 
 mongo_client = _get_mongo_client()
 gemini = gemini_processor.GeminiProcessor(
@@ -63,7 +63,7 @@ def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engi
                 model_name=gemini.model_name,
                 mongo_client=mongo_client
             )
-
+            return response
         except Exception as e:
             logger.error(f"Failed to process {filename}: {str(e)}", exc_info=True)
 

@@ -5,6 +5,8 @@ import tempfile
 from typing import Any
 
 from mongodb import get_all_file_ids, get_document_by_fileid
+import sys
+sys.path.append('.')
 from utils import get_logger
  
 

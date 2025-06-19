@@ -51,6 +51,8 @@ CURRENT ISSUES AND STATUS UPDATES
 
         Next step: Improve logger to create separate log files for each run and avoid empty error logs.
 
+7) Docx2pdf will fail if a non windows pc
+
 DEVELOPMENT MILESTONES
 
     May 26

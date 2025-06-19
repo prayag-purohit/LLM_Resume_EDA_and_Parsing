@@ -4,6 +4,8 @@ from pymongo import MongoClient
 from datetime import datetime
 import hashlib
 from dotenv import load_dotenv
+import sys 
+sys.path.append('.')
 from utils import get_logger
 
 logger = get_logger(__name__)
@@ -202,12 +204,4 @@ def get_document_by_fileid(db_name:str,
 
 #Testing
 if __name__ == "__main__":
-    file_id_list=['DMC Resume 1', 'DMC Resume 2', 'DMC Resume 3', 'DMC Resume 4', 'DMC Resume 5']
-    doc_one = get_document_by_fileid(
-        db_name="Resume_study", 
-        collection_name="JSON_raw", 
-        file_id=file_id_list[0], 
-    )
-    # MongoDB directly returns a json object, so we can print and manipulate it directly.
-    print(type(doc_one))
-    print(doc_one["JSON_Resume"])
+    mongo_client = _get_mongo_client()

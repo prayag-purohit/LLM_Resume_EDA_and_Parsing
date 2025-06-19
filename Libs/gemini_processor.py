@@ -1,6 +1,9 @@
 import os
 import re
 from datetime import datetime
+import sys 
+
+sys.path.append(".")
 from utils import get_logger
 from typing import Optional, List
 from google import genai
@@ -162,9 +165,6 @@ class GeminiProcessor:
                 logger.error(f"Prompt Feedback: {response.promptFeedback}")
                 if hasattr(response, 'promptFeedback') and hasattr(response.promptFeedback, 'blockReason') and response.promptFeedback.blockReason:
                     logger.error(f"Block Reason: {response.promptFeedback.blockReason}")
-        finally:
-            # Cleanup uploaded file
-            self.delete_uploaded_file()
     
     def save_generated_content(self, response: types.GenerateContentResponse, output_path: str) -> None:
         """
