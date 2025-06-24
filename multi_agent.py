@@ -3,11 +3,13 @@ import shutil
 from datetime import datetime
 from docx2pdf import convert
 import libs.gemini_processor as gemini_processor
-from libs.mongodb import save_LLM_response_to_mongodb, _get_mongo_client
+from libs.mongodb import save_llm_responses_to_mongodb, _get_mongo_client
 from utils import get_logger
 import time
 
-
+# This workflow starts two gemini models - first a good model goes through with the EDA process, and the second model validates and structures the output.
+# Both the models get the required files. 
+# Limitation : The first model's output - including the thought process, and token count is lost, MongoDB also Saves just the response by the validator model
 
 LOOP_DIR="Resume_inputs"
 ARCHIVE_ROOT="Resume_inputs"
@@ -96,10 +98,6 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"Failed while uploading file {filename}, ERROR: {e}")
 
-
-
-
-
             logger.info('Conducting first pass')
             try:
                 gemini_eda.load_prompt_template('Prompt_templates/prompt_engineering_eda.md')
@@ -108,11 +106,10 @@ if __name__ == "__main__":
             except Exception as e: 
                 logger.error(f"Failed in first pass, file: {filename}, ERROR: {e}")
 
-            time.sleep(10)
 
             logger.info('Conducting second pass for validation')
             try:
-                validator_prompt = gemini_validator.load_prompt_template('Prompt_templates/prompt_engineering_validation.md')
+                validator_prompt = gemini_validator.load_prompt_template('Prompt_templates\prompt_engineering_EDAvalidation.md')
                 validator_prompt = validator_prompt + "\nThe LLM Response:" + eda_response.text
                 gemini_validator.uploaded_resume_file = root_gemini.uploaded_resume_file
                 validator_response = gemini_validator.generate_content(prompt = validator_prompt)
@@ -121,24 +118,19 @@ if __name__ == "__main__":
                 logger.error(f"Failed in second pass, file: {filename}, ERROR: {e}")
                 
 
-            
-
-
         except Exception as e:
             logger.exception(f'Error processing file {filename}: {e}', exc_info=True)
 
-        
-        save_LLM_response_to_mongodb(
-            llm_raw_text=validator_response.text,
-            llm_response=validator_response,
-            file_name=processed_filename,
+# Save llm_responses to MongoDB function doens't work well, we can use save_single_LLM_response_to_mongodb
+        llm_responses = [eda_response, validator_response]
+        save_llm_responses_to_mongodb(
+            *llm_responses,
             db_name=DB_NAME,
             collection_name="multi_agent_test",
             file_path=file_path,
             mongo_client=mongo_client,
-            model_name=gemini_validator.model_name
         )
-        
+
         root_gemini.delete_uploaded_file()
         os.makedirs(PROCESSED_DIR, exist_ok=True)
         dest_path = safe_move(file_path, os.path.join(PROCESSED_DIR, processed_filename))
