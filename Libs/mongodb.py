@@ -52,7 +52,7 @@ def _clean_raw_llm_response(llm_raw_text):
 
 
 # === Save to MongoDB ===
-
+# Deprecated: This function is kept for backward compatibility, but prefer using `save_llm_responses_to_mongodb` for multiple responses.
 def save_single_LLM_response_to_mongodb(
                     llm_response, 
                     db_name="Resume_study", 
@@ -132,120 +132,108 @@ def save_single_LLM_response_to_mongodb(
             logger.info("Closed MongoDB connection")
 
 def save_llm_responses_to_mongodb(
-    *llm_responses,
-    db_name="Resume_study",
-    collection_name="EDA_data",
-    file_path="HRC resume 10.pdf",
-    mongo_client: MongoClient = None,
+    responses_by_agent: dict[str, any],
+    *,
+    db_name: str = "Resume_study",
+    collection_name: str = "EDA_data",
+    file_path: str,
+    mongo_client: MongoClient | None = None,
 ):
     """
-    Saves one or more LLM responses related to a single file to MongoDB.
-
-    This function aggregates text content and sums the usage metadata from all
-    provided response objects into a single database record.
+    Persist one or more LLM agent outputs—each under a distinct key—to MongoDB.
 
     Args:
-        *llm_responses: A variable number of LLM response objects to process.
-        db_name (str): The MongoDB database name.
-        collection_name (str): The MongoDB collection name.
-        file_path (str): The path to the file being processed.
-        mongo_client: An active pymongo.MongoClient instance. If None, a new
-                      connection is created and closed automatically.
+        responses_by_agent: 
+            A dict mapping agent names → genai SDK response objects.
+            e.g. {"EDA": resp1, "Standardized_Raw": resp2, ...}
+        db_name:        target database
+        collection_name:target collection
+        file_path:      path to the original PDF/DOCX
+        mongo_client:   if provided, reuse it; otherwise we open/close our own.
     """
-    # --- 1. Input Validation ---
-    if not llm_responses:
-        logger.warning("No LLM responses provided. Nothing to save.")
+    if not responses_by_agent:
+        logger.warning("No agent responses provided. Aborting save.")
         return
 
-    # --- 2. File Metadata Extraction ---
+    # --- 1. Read file bytes & metadata ---
     try:
-        with open(file_path, "rb") as f:
-            raw_file_bytes = f.read()
-        file_name = os.path.basename(file_path)
-        industry_prefix = file_name.split(' ')[0]
+        raw = open(file_path, "rb").read()
     except FileNotFoundError:
-        logger.error(f"File not found at path: {file_path}")
+        logger.error(f"File not found: {file_path}")
         return
 
-    # --- 3. Aggregate Data from all LLM Responses ---
-    combined_text_dict = {}
+    file_name = os.path.basename(file_path)
+    industry_prefix = file_name.split(" ")[0]
+    file_hash = hashlib.sha256(raw).hexdigest()
+
+    # --- 2. Prepare aggregators ---
     model_names = set()
-    
-    # Initialize total usage with all potential keys
-    aggregated_usage = {
+    usage_agg = {
         "prompt_token_count": 0,
         "thoughts_token_count": 0,
         "total_token_count": 0,
-        # Details are lists, so we initialize them as empty lists to extend
         "prompt_tokens_details": [],
         "tool_use_prompt_tokens_details": [],
     }
 
-    for response in llm_responses:
-        # a) Combine cleaned text dictionaries
-        if hasattr(response, 'text'):
-            llm_raw_text_dict = _clean_raw_llm_response(llm_raw_text=response.text)
-            combined_text_dict.update(llm_raw_text_dict)
+    cleaned_by_agent: dict[str, dict] = {}
 
-        # b) Collect unique model names
-        if hasattr(response, 'modelVersion'):
-            model_names.add(response.modelVersion)
-            
-        # c) Sum usage metadata
-        if hasattr(response, 'usage_metadata'):
-            usage_data = response.usage_metadata.model_dump()
-            aggregated_usage["prompt_token_count"] += usage_data.get("prompt_token_count", 0)
-            aggregated_usage["thoughts_token_count"] += usage_data.get("thoughts_token_count", 0)
-            aggregated_usage["total_token_count"] += usage_data.get("total_token_count", 0)
-            
-            if usage_data.get("prompt_tokens_details"):
-                aggregated_usage["prompt_tokens_details"].extend(usage_data["prompt_tokens_details"])
-            if usage_data.get("tool_use_prompt_tokens_details"):
-                aggregated_usage["tool_use_prompt_tokens_details"].extend(usage_data["tool_use_prompt_tokens_details"])
+    # --- 3. Clean each agent’s output & aggregate metadata ---
+    for agent_name, resp in responses_by_agent.items():
+        # a) clean text
+        if hasattr(resp, "text"):
+            cleaned = _clean_raw_llm_response(llm_raw_text=resp.text)
+            cleaned_by_agent[agent_name] = cleaned
+        else:
+            cleaned_by_agent[agent_name] = {}
 
+        # b) collect modelVersion
+        if hasattr(resp, "model_version"):
+            model_names.add(resp.model_version)
 
-    # --- 4. MongoDB Connection Handling ---
+        # c) sum usage metadata
+        if hasattr(resp, "usage_metadata"):
+            u = resp.usage_metadata.model_dump()
+            usage_agg["prompt_token_count"] += u.get("prompt_token_count", 0)
+            usage_agg["thoughts_token_count"] += u.get("thoughts_token_count", 0)
+            usage_agg["total_token_count"]   += u.get("total_token_count", 0)
+            if u.get("prompt_tokens_details"):
+                usage_agg["prompt_tokens_details"].extend(u["prompt_tokens_details"])
+            if u.get("tool_use_prompt_tokens_details"):
+                usage_agg["tool_use_prompt_tokens_details"].extend(u["tool_use_prompt_tokens_details"])
+
+    # --- 4. Mongo connection ---
+    close_conn = False
     if mongo_client is None:
         mongo_client = _get_mongo_client()
-        close_client = True
-    else:
-        close_client = False
-
+        close_conn = True
     if not mongo_client:
-        logging.error("Cannot save to MongoDB: Client not available.")
+        logger.error("Cannot connect to MongoDB.")
         return
 
-    # --- 5. Document Creation and Insertion ---
+    # --- 5. Build & insert document ---
     try:
-        db = mongo_client[db_name]
-        collection = db[collection_name]
-
         doc = {
-            # a) Primary key and file metadata
-            "file_id": file_name,
-            "industry_prefix": industry_prefix,
-            "file_size_bytes": len(raw_file_bytes),
-            "file_hash": hashlib.sha256(raw_file_bytes).hexdigest(),
-
-            # b) Unpacked data from all combined LLM responses
-            **combined_text_dict,
-
-            # c) Aggregated LLM metadata
-            "model_names": list(model_names), # Store a list of unique model names
-            "num_responses_aggregated": len(llm_responses), # New metadata field
-            "usage_tokens": aggregated_usage, # The fully summed usage
-            "timestamp": datetime.now(),
+            "file_id":            file_name,
+            "industry_prefix":    industry_prefix,
+            "file_size_bytes":    len(raw),
+            "file_hash":          file_hash,
+            "model_names":        list(model_names),
+            "num_agents":         len(responses_by_agent),
+            "usage_tokens":       usage_agg,
+            "timestamp":          datetime.now(),
+            # embed each agent’s cleaned JSON under its key:
+            **{agent: cleaned_by_agent[agent] for agent in cleaned_by_agent}
         }
-        collection.insert_one(doc)
-        logger.info(f"Successfully saved aggregated data for {file_name} to MongoDB.")
-
+        db = mongo_client[db_name]
+        db[collection_name].insert_one(doc)
+        logger.info(f"Saved LLM outputs for {file_name} to {db_name}.{collection_name}")
     except Exception as e:
-        logger.error(f"MongoDB Error during save: {e}")
+        logger.error(f"Error saving to MongoDB: {e}")
     finally:
-        if close_client and mongo_client:
+        if close_conn:
             mongo_client.close()
             logger.info("Closed MongoDB connection")
-
 
 
 # === Retrieve from MongoDB ===

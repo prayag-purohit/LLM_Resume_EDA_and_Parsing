@@ -1,6 +1,6 @@
 from google import genai
 
-client = genai.Client(api_key="AIzaSyCzGGWEQHyzKeuHY8nSnPK2iDhIVFZmVPo")
+client = genai.Client(api_key="")
 
 print("List of models that support generateContent:\n")
 for m in client.models.list():
@@ -13,3 +13,10 @@ for m in client.models.list():
     for action in m.supported_actions:
         if action == "embedContent":
             print(m.name)
+
+if __name__ ==  "__main__":
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents = ['What is your name?'])
+
+    print(response)
