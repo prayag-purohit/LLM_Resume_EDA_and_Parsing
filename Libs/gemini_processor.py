@@ -10,6 +10,9 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
+# Testing
+from mongodb import get_all_file_ids, get_document_by_fileid, _get_mongo_client
+
 # Set up logging
 
 logger = get_logger(__name__)
@@ -43,6 +46,7 @@ class GeminiProcessor:
         self.tools = self._setup_tools(enable_google_search)
         self.uploaded_resume_file = None
         self.prompt_template = None
+        self.mongo_document = None
         
     def _setup_api_client(self, api_key: Optional[str]) -> None:
         """Set up the Gemini API client."""
@@ -113,6 +117,7 @@ class GeminiProcessor:
         except Exception as e:
             logger.error(f"Error uploading file {document_path}: {e}")
             raise
+
     
     def delete_uploaded_file(self) -> None:
         """Delete the currently uploaded file."""
@@ -124,6 +129,7 @@ class GeminiProcessor:
             except Exception as e:
                 logger.error(f"Error deleting uploaded file: {e}")
                 raise
+
     
     def generate_content(self, prompt: Optional[str] = None) -> types.GenerateContentResponse:
         """
@@ -135,21 +141,32 @@ class GeminiProcessor:
         Returns:
             types.GenerateContentResponse: The generated content
         """
-        if not self.uploaded_resume_file:
-            raise ValueError("No file has been uploaded")
             
         if prompt is None:
             if not self.prompt_template:
                 raise ValueError("No prompt template loaded and no custom prompt provided")
             prompt = self.prompt_template
-            
+
+        contents = []
+        if not self.uploaded_resume_file:
+            logger.info("No file uploaded, using prompt only")
+            contents.append(prompt)
+        elif self.uploaded_resume_file:
+            logger.info(f"Using uploaded file: {self.uploaded_resume_file.name}")
+            contents.append(prompt)
+            contents.append(self.uploaded_resume_file)
+        elif self.mongo_document:
+            logger.info("Using MongoDB document content")
+            contents.append(prompt)
+            contents.append(self.mongo_document)
+        
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=[prompt, self.uploaded_resume_file],
+                contents=contents,
                 config=types.GenerateContentConfig(
                     temperature=self.temperature,
-                    tools=self.tools
+                    tools=self.tools,
                 )
             )
             
@@ -166,7 +183,7 @@ class GeminiProcessor:
                 if hasattr(response, 'promptFeedback') and hasattr(response.promptFeedback, 'blockReason') and response.promptFeedback.blockReason:
                     logger.error(f"Block Reason: {response.promptFeedback.blockReason}")
     
-    def save_generated_content(self, response: types.GenerateContentResponse, output_path: str) -> None:
+    def save_generated_content(self, response: types.GenerateContentResponse, output_dir: str = "text_output") -> None:
         """
         Save the generated content to a file.
         
@@ -183,9 +200,12 @@ class GeminiProcessor:
             try:
                 os.makedirs("text_output", exist_ok=True)
                 timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
-                base_name = os.path.splitext(os.path.basename(self.file_name))[0]
+                if self.uploaded_resume_file:
+                    base_name = os.path.splitext(os.path.basename(self.file_name))[0]
+                else: 
+                    base_name = "MongoDB_document"
                 output_filename = f"{base_name}_{timestamp_str}.txt"
-                output_path = os.path.join("text_output", output_filename)
+                output_path = os.path.join(output_dir, output_filename)
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(response.text)
             except Exception as e_write:
@@ -222,3 +242,21 @@ class GeminiProcessor:
                 self.delete_uploaded_file()
 
 
+if __name__ == "__main__":
+    # Example usage for mongoDB processing
+    Gemini = GeminiProcessor(
+        model_name="gemini-1.5-flash",
+        temperature=0.4,
+        enable_google_search= False)
+    Gemini.load_prompt_template("Prompt_templates\prompt_engineering_EDAvalidation.md")
+    mongo_client = _get_mongo_client()
+    all_files = get_all_file_ids(db_name="Resume_study", 
+                                 collection_name="ITC_EDA", 
+                                 mongo_client=mongo_client)
+    test_file = get_document_by_fileid(db_name="Resume_study", 
+                                       collection_name="ITC_EDA", 
+                                       file_id=all_files[0], 
+                                       mongo_client=mongo_client)
+    Gemini.mongo_document = test_file
+    response = Gemini.generate_content()
+    Gemini.save_generated_content(response)
