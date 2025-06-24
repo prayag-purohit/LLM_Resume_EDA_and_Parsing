@@ -189,7 +189,7 @@ class GeminiProcessor:
         
         Args:
             response (types.GenerateContentResponse): The response from the Gemini API
-            output_path (str): Path to save the generated content
+            output_dir (str): Path to save the generated content
             
         Returns:
             None
@@ -230,9 +230,9 @@ class GeminiProcessor:
         try:
             self.load_prompt_template(prompt_template_path)
             self.upload_file(file_path)
-            output_file_path = os.path.join("text_output", f"{self.file_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+            output_dir = os.path.join("data","text_output")
             response = self.generate_content()
-            self.save_generated_content(output_path=output_file_path, response=response)
+            self.save_generated_content(output_dir=output_dir, response=response)
             return response
         except Exception as e:
             logger.error(f"Error processing file: {e}")

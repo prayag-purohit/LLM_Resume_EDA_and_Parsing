@@ -10,8 +10,8 @@ logger = get_logger(__name__)
 
 mongo_client = _get_mongo_client()
 gemini = gemini_processor.GeminiProcessor(
-    model_name="gemini-2.0-flash",
-    temperature=0.4,
+    model_name="gemini-2.5-flash",
+    temperature=0.3,
     api_key=os.getenv("GEMINI_API_KEY"),
     enable_google_search=False,
 )
@@ -23,7 +23,7 @@ def safe_move(src, dst):
     shutil.move(src, dst)
     return dst
 
-def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engineering_eda.md", collection_name="EDA_data"):
+def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engineering_eda.md", collection_name="Pretty_resume_Test"):
     for filename in os.listdir(Loop_dir):
         try:
             file_path = os.path.join(Loop_dir, filename)
@@ -51,22 +51,21 @@ def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engi
 
             save_single_LLM_response_to_mongodb(
                 llm_response=response,
-                file_path=dest_path, #File path used to get filename, raw bytes, industry prefix, and file size (all metadata)
+                file_path=file_path, #File path used to get filename, raw bytes, industry prefix, and file size (all metadata)
                 db_name="Resume_study",
                 collection_name=collection_name,
                 mongo_client=mongo_client
             )
 
-            processed_dir = "Processed_resumes"
+            processed_dir = "data/Processed_resumes"
             os.makedirs(processed_dir, exist_ok=True)
             dest_path = safe_move(file_path, os.path.join(processed_dir, processed_filename))
             logger.info(f'Successfully processed file: {processed_filename}')
-            return response
         except Exception as e:
             logger.error(f"Failed to process {filename}: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
     loop_local_files(
         Loop_dir="Resume_inputs",
-        prompt_template_path="prompt_engineering_parsing.md",
-        collection_name="JSON_raw")
+        prompt_template_path="Prompt_templates/prompt_engineering_parsing.md",
+        collection_name="pretty_resume_QA")

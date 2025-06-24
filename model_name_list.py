@@ -19,4 +19,4 @@ if __name__ ==  "__main__":
         model="gemini-2.0-flash",
         contents = ['What is your name?'])
 
-    print(response)
+    print(response.model_version)

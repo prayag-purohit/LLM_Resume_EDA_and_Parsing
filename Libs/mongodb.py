@@ -110,7 +110,7 @@ def save_single_LLM_response_to_mongodb(
             **llm_raw_text_dict,
 
             # 3)LLM metadata
-            "model_name": llm_response.modelVersion,
+            "model_name": llm_response.model_version,
             "usage_tokens": llm_response.usage_metadata.model_dump(
 	            include={
 		            "prompt_token_count",

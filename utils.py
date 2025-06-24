@@ -3,13 +3,13 @@ import logging
 from datetime import datetime
 
 # Ensure log directories exist
-os.makedirs("logs", exist_ok=True)
-os.makedirs("logs/Errors", exist_ok=True)
+os.makedirs("data/logs", exist_ok=True)
+os.makedirs("data/logs/Errors", exist_ok=True)
 
 # Timestamp for filenames
 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-general_log = os.path.join("E:\GT6\Technology\Resume_EDA\data\logs", f"resume_parser{ts}.log")
-error_log   = os.path.join("E:\GT6\Technology\Resume_EDA\data\logs", "Errors", f"error_resume_parser{ts}.log")
+general_log = os.path.join("E:/GT6/Technology/Resume_EDA/data/logs", f"resume_parser{ts}.log")
+error_log   = os.path.join("E:/GT6/Technology/Resume_EDA/data/logs", "Errors", f"error_resume_parser{ts}.log")
 
 # Set up root logger with basic configuration
 logging.basicConfig(
