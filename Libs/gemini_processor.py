@@ -80,14 +80,15 @@ class GeminiProcessor:
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Extract the prompt template between triple backticks
-            prompt_match = re.search(r'```\n(.*?)\n```', content, re.DOTALL)
-            if prompt_match:
-                self.prompt_template = prompt_match.group(1)
+            # Extract the prompt template between triple equals (===)
+            # prompt_match = re.search(r'```\n(.*?)\n```', content, re.DOTALL)
+            # Removed on 6/25 because it was messing with ``` in the prompt template (code blocks)
+            if content:
+                self.prompt_template = content.strip()
                 logger.info(f"Successfully loaded prompt template from {prompt_file_path}")
                 return self.prompt_template
             else:
-                raise ValueError(f"Could not find prompt template (between ```) in {prompt_file_path}")
+                raise ValueError(f"No Content found in promopt template file: {prompt_file_path}")
         except FileNotFoundError:
             logger.error(f"Prompt template file not found: {prompt_file_path}")
             return None
@@ -244,6 +245,7 @@ class GeminiProcessor:
 
 if __name__ == "__main__":
     # Example usage for mongoDB processing
+    """
     Gemini = GeminiProcessor(
         model_name="gemini-1.5-flash",
         temperature=0.4,
@@ -260,3 +262,10 @@ if __name__ == "__main__":
     Gemini.mongo_document = test_file
     response = Gemini.generate_content()
     Gemini.save_generated_content(response)
+    """
+    Gemini = GeminiProcessor(
+        model_name="gemini-1.5-flash",
+        temperature=0.4,
+        enable_google_search= False)
+    prompt = Gemini.load_prompt_template("Prompt_templates/prompt_engineering_eda.md")
+    print(prompt)

@@ -4,12 +4,12 @@ import subprocess
 import tempfile
 from typing import Any
 
-from mongodb import get_all_file_ids, get_document_by_fileid
+from mongodb import get_all_file_ids, get_document_by_fileid, _get_mongo_client
 import sys
 sys.path.append('.')
 from utils import get_logger
  
-
+mongo_client = _get_mongo_client()
 logger = get_logger(__name__)
 
 
@@ -51,7 +51,8 @@ def export_jsonresume_to_pdf(json_data: Any,
 def export_all_resumes(db_name: str,
                         collection: str,
                         output_dir: str,
-                        theme: str = 'jsonresume-theme-even') -> None:
+                        theme: str = 'jsonresume-theme-even',
+                        mongo_client = mongo_client) -> None:
     """Export all resumes stored in MongoDB to PDF files.
 
     Parameters
@@ -69,12 +70,12 @@ def export_all_resumes(db_name: str,
 
     file_ids = get_all_file_ids(db_name, collection)
     for file_id in file_ids:
-        doc = get_document_by_fileid(db_name, collection, file_id)
+        doc = get_document_by_fileid(db_name, collection, file_id, mongo_client)
         if not doc or 'JSON_Resume' not in doc:
             logger.warning(f"No JSON_Resume data for {file_id}")
             continue
 
-        pdf_path = os.path.join(output_dir, f"{file_id}.pdf")
+        pdf_path = os.path.join(output_dir, f"{file_id}")
         export_jsonresume_to_pdf(doc['JSON_Resume'], pdf_path, theme)
 
-export_all_resumes(db_name="Resume_study", collection="JSON_raw", output_dir="Exported_resumes", theme="jsonresume-theme-even")
+export_all_resumes(db_name="Resume_study", collection="pretty_resume_QA", output_dir="Exported_resumes/modern", theme="jsonresume-theme-modern")

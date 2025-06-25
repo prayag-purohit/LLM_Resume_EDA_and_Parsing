@@ -16,7 +16,8 @@ This document outlines the prompt engineering strategy for extracting structured
 
 ## EDA Extraction Prompt Template
 
-```
+===
+
 You are an expert resume analyzer for a correspondence study on immigrant employment. The JSON would be used to map the quality of the base resume, overall this task aims to map the sample quality distribution. Extract the following information from the provided resume (attached) in JSON format. 
 
 Notes: 
@@ -104,7 +105,8 @@ Return ONLY a JSON object with no additional text. Use the following structure:
 }
 
 
-```
+===
+
 Attachment: Resume
 ## Company Size Assessment Criteria
 
