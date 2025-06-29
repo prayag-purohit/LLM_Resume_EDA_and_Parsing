@@ -1,9 +1,13 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
 import shutil
 from datetime import datetime
 from docx2pdf import convert
-import Libs.gemini_processor as gemini_processor
-from Libs.mongodb import save_llm_responses_to_mongodb, _get_mongo_client
+import libs.gemini_processor as gemini_processor
+from libs.mongodb import save_llm_responses_to_mongodb, _get_mongo_client
 from utils import get_logger
 import time
 
@@ -106,7 +110,8 @@ if __name__ == "__main__":
             if filename.lower().endswith(".docx"):
                 file_path = convert_to_pdf(file_path, ARCHIVE_ROOT)
             processed_filename = os.path.basename(file_path)
-            
+            resume_data_response = None
+            eda_response = None
             try:
                 # upload file to root gemini
                 uploaded_file = root_gemini.upload_file(file_path)
@@ -116,7 +121,7 @@ if __name__ == "__main__":
             # First pass code 
             logger.info('Conducting first pass')
             try:
-                gemini_resume_data.load_prompt_template('Prompt_templates/Standardization/prompt_std_resume_data.md')
+                gemini_resume_data.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_resume_data.md')
                 gemini_resume_data.uploaded_resume_file = root_gemini.uploaded_resume_file
                 resume_data_response = gemini_resume_data.generate_content()
             except Exception as e: 
@@ -125,7 +130,7 @@ if __name__ == "__main__":
             # Second pass code
             logger.info('Conducting second pass for validation')
             try:
-                eda_prompt = gemini_eda.load_prompt_template('Prompt_templates/Standardization/prompt_std_EDA.md')
+                eda_prompt = gemini_eda.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_EDA.md')
                 eda_prompt = eda_prompt + "\nThe LLM Response:" + resume_data_response.text
                 gemini_eda.uploaded_resume_file = root_gemini.uploaded_resume_file
                 eda_response = gemini_eda.generate_content(prompt = eda_prompt)
@@ -137,16 +142,33 @@ if __name__ == "__main__":
         except Exception as e:
             logger.exception(f'Error processing file {filename}: {e}', exc_info=True)
 
-# Save llm_responses to MongoDB function doens't work well, we can use save_single_LLM_response_to_mongodb
-        llm_responses_dict = { "resume_data": resume_data_response, "EDA": eda_response}
+        # Save llm_responses to MongoDB function doens't work well, we can use save_single_LLM_response_to_mongodb
+        llm_responses_dict = {}
+        if resume_data_response is not None:
+            llm_responses_dict["resume_data"] = resume_data_response
+        if eda_response is not None:
+            llm_responses_dict["EDA"] = eda_response
 
-        save_llm_responses_to_mongodb(
-            llm_responses_dict,
-            db_name=DB_NAME,
-            collection_name="Standardized_resume_data",
-            file_path=file_path,
-            mongo_client=mongo_client,
-        )
+        if llm_responses_dict:
+            try:
+                save_llm_responses_to_mongodb(
+                    llm_responses_dict,
+                    db_name=DB_NAME,
+                    collection_name="Standardized_resume_data",
+                    file_path=file_path,
+                    mongo_client=mongo_client,
+                )
+            except Exception as e:
+                logger.error(f"Error saving to MongoDB for {processed_filename}: {e}")
+                # Log raw LLM responses for debugging
+                raw_log_dir = os.path.join(TEXT_OUTPUT_DIR, "raw_failed_llm_responses")
+                os.makedirs(raw_log_dir, exist_ok=True)
+                if resume_data_response is not None and hasattr(resume_data_response, 'text'):
+                    with open(os.path.join(raw_log_dir, f"{processed_filename}_resume_data_raw.txt"), "w", encoding="utf-8") as f:
+                        f.write(resume_data_response.text)
+                if eda_response is not None and hasattr(eda_response, 'text'):
+                    with open(os.path.join(raw_log_dir, f"{processed_filename}_eda_raw.txt"), "w", encoding="utf-8") as f:
+                        f.write(eda_response.text)
         
         root_gemini.delete_uploaded_file()
         os.makedirs(PROCESSED_DIR, exist_ok=True)
