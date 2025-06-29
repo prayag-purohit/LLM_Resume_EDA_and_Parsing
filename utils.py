@@ -8,8 +8,11 @@ os.makedirs("data/logs/Errors", exist_ok=True)
 
 # Timestamp for filenames
 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-general_log = os.path.join("E:/GT6/Technology/Resume_EDA/data/logs", f"resume_parser{ts}.log")
-error_log   = os.path.join("E:/GT6/Technology/Resume_EDA/data/logs", "Errors", f"error_resume_parser{ts}.log")
+# Use local data/logs directory for log files
+log_dir = os.path.join("data", "logs")
+error_log_dir = os.path.join(log_dir, "Errors")
+general_log = os.path.join(log_dir, f"resume_parser{ts}.log")
+error_log   = os.path.join(error_log_dir, f"error_resume_parser{ts}.log")
 
 # Set up root logger with basic configuration
 logging.basicConfig(

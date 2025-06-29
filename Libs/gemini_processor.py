@@ -79,15 +79,9 @@ class GeminiProcessor:
         try:
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
-            # Extract the prompt template between triple backticks
-            prompt_match = re.search(r'```\n(.*?)\n```', content, re.DOTALL)
-            if prompt_match:
-                self.prompt_template = prompt_match.group(1)
-                logger.info(f"Successfully loaded prompt template from {prompt_file_path}")
-                return self.prompt_template
-            else:
-                raise ValueError(f"Could not find prompt template (between ```) in {prompt_file_path}")
+            self.prompt_template = content
+            logger.info(f"Successfully loaded prompt template from {prompt_file_path}")
+            return self.prompt_template
         except FileNotFoundError:
             logger.error(f"Prompt template file not found: {prompt_file_path}")
             return None
