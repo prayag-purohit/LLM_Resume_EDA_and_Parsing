@@ -47,6 +47,7 @@ class GeminiProcessor:
         self.uploaded_resume_file = None
         self.prompt_template = None
         self.mongo_document = None
+        self.file_name = None  # Ensure file_name is always defined
         
     def _setup_api_client(self, api_key: Optional[str]) -> None:
         """Set up the Gemini API client."""
@@ -194,7 +195,7 @@ class GeminiProcessor:
             try:
                 os.makedirs("text_output", exist_ok=True)
                 timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
-                if self.uploaded_resume_file:
+                if self.uploaded_resume_file and self.file_name:
                     base_name = os.path.splitext(os.path.basename(self.file_name))[0]
                 else: 
                     base_name = "MongoDB_document"
