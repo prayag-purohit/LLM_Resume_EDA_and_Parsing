@@ -2,8 +2,8 @@ import os
 import shutil
 from datetime import datetime
 from docx2pdf import convert
-import libs.gemini_processor as gemini_processor
-from libs.mongodb import save_llm_responses_to_mongodb, _get_mongo_client
+import Libs.gemini_processor as gemini_processor
+from Libs.mongodb import save_llm_responses_to_mongodb, _get_mongo_client
 from utils import get_logger
 import time
 

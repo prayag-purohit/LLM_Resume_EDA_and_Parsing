@@ -43,7 +43,7 @@ gemini_resume_data = gemini_processor.GeminiProcessor(
 
 # EDA agent
 gemini_eda = gemini_processor.GeminiProcessor(
-    model_name='gemini-2.5-flash',
+    model_name='gemini-2.5-pro',
     temperature=0.4,
     enable_google_search=True
 )

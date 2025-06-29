@@ -31,7 +31,15 @@ def _get_mongo_client():
         logger.error(f"Error connecting to MongoDB: {e}")
         return None   
 
-def _clean_raw_llm_response(llm_raw_text):
+def _clean_raw_llm_response(llm_raw_text, file_name=None):
+    """
+    Clean and parse the raw LLM response text as JSON.
+    Args:
+        llm_raw_text (str): The raw text response from the LLM.
+        file_name (str, optional): The name of the file being processed (for logging).
+    Returns:
+        dict: Parsed JSON if successful, or ValueError if JSON is invalid.
+    """
     llm_raw_text_clean = llm_raw_text.strip()
     if llm_raw_text_clean.startswith("```json"):
         llm_raw_text_clean = llm_raw_text_clean[len("```json"):].strip()
@@ -39,15 +47,13 @@ def _clean_raw_llm_response(llm_raw_text):
         llm_raw_text_clean = llm_raw_text_clean[len("```"):].strip()
     if llm_raw_text_clean.endswith("```"):
         llm_raw_text_clean = llm_raw_text_clean[:-3].strip()
-    
     try:
         llm_raw_text_dict = json.loads(llm_raw_text_clean)
         return llm_raw_text_dict
-
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse LLM response as JSON for {file_name}: {e}")
         logger.debug(f"Problematic JSON string: {llm_raw_text_clean}")
-    # Decide how to handle: skip saving, save raw text in an error field, or raise
+        # Decide how to handle: skip saving, save raw text in an error field, or raise
         return ValueError(f"Invalid JSON format in LLM response for {file_name}. Please check the response format.")
 
 
@@ -79,7 +85,7 @@ def save_single_LLM_response_to_mongodb(
     industry_prefix = file_name.split(' ')[0]
     llm_raw_text = llm_response.text
     
-    llm_raw_text_dict = _clean_raw_llm_response(llm_raw_text=llm_raw_text)
+    llm_raw_text_dict = _clean_raw_llm_response(llm_raw_text=llm_raw_text, file_name=file_name)
     
     if mongo_client is None:
         mongo_client = _get_mongo_client()
@@ -112,8 +118,8 @@ def save_single_LLM_response_to_mongodb(
             # 3)LLM metadata
             "model_name": llm_response.model_version,
             "usage_tokens": llm_response.usage_metadata.model_dump(
-	            include={
-		            "prompt_token_count",
+            	include={
+            		"prompt_token_count",
                     "prompt_tokens_details",
                     "thoughts_token_count",
                     "tool_use_prompt_tokens_details",
@@ -182,7 +188,7 @@ def save_llm_responses_to_mongodb(
     for agent_name, resp in responses_by_agent.items():
         # a) clean text
         if hasattr(resp, "text"):
-            cleaned = _clean_raw_llm_response(llm_raw_text=resp.text)
+            cleaned = _clean_raw_llm_response(llm_raw_text=resp.text, file_name=file_name)
             cleaned_by_agent[agent_name] = cleaned
         else:
             cleaned_by_agent[agent_name] = {}
@@ -195,7 +201,11 @@ def save_llm_responses_to_mongodb(
         if hasattr(resp, "usage_metadata"):
             u = resp.usage_metadata.model_dump()
             usage_agg["prompt_token_count"] += u.get("prompt_token_count", 0)
-            usage_agg["thoughts_token_count"] += u.get("thoughts_token_count", 0)
+            # Fix: treat None as 0 for thoughts_token_count
+            thoughts_count = u.get("thoughts_token_count", 0)
+            if thoughts_count is None:
+                thoughts_count = 0
+            usage_agg["thoughts_token_count"] += thoughts_count
             usage_agg["total_token_count"]   += u.get("total_token_count", 0)
             if u.get("prompt_tokens_details"):
                 usage_agg["prompt_tokens_details"].extend(u["prompt_tokens_details"])
