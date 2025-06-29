@@ -109,6 +109,7 @@ IMPORTANT: **Return JSON ONLY STRICTLY following the output schema with no extra
   "fallback_reason": string
 }
 ```
+---
 # Field-by-Field Extraction Instructions 
 
 ### resume_data
