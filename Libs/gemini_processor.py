@@ -238,6 +238,7 @@ class GeminiProcessor:
 
 if __name__ == "__main__":
     # Example usage for mongoDB processing
+    """
     Gemini = GeminiProcessor(
         model_name="gemini-1.5-flash",
         temperature=0.4,
@@ -254,3 +255,10 @@ if __name__ == "__main__":
     Gemini.mongo_document = test_file
     response = Gemini.generate_content()
     Gemini.save_generated_content(response)
+    """
+    Gemini = GeminiProcessor(
+        model_name="gemini-1.5-flash",
+        temperature=0.4,
+        enable_google_search= False)
+    prompt = Gemini.load_prompt_template("Prompt_templates/prompt_engineering_eda.md")
+    print(prompt)

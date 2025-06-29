@@ -82,7 +82,7 @@ MONGODB_URI=mongodb://localhost:27017/ #Use a connection string provided by pray
 - `libs/resumed_exported.py`: Handles conversion of MongoDB data to PDF resumes using JSON Resume.Requirees npm and some node dependencies
 - `libs/.env`: Contains secrets
 - `Resumee_inputs`: Add resume documents to be parsed in this dir
-- `Prompt_templates/`: Contains prompt templates with triple backticks (```)
+- `Prompt_templates/`: Contains prompt templates
 - `requirements.txt`: Python dependencies.
 
 ---
