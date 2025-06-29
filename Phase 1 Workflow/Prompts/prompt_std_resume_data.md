@@ -268,12 +268,12 @@ TAR-style description:
     }
   ]
 }
-"EDA": {
+"extraction_methods": {
   "likely_home_country": "India",
-  "has_missing_location": true,
-  "work_highlights_extraction": "tar_rephrased",
+  "work_highlights_extraction": "as_is",
+  "has_missing_location": false,
   "location_source": "extracted",
-  "fallback_reason": "Could not determine company location for 1 job."
+  "fallback_reason": ""
 }
 ```
 
