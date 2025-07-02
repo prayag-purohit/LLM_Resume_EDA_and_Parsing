@@ -2,8 +2,8 @@ import os
 import shutil
 from datetime import datetime
 from docx2pdf import convert
-import Libs.gemini_processor as gemini_processor
-from Libs.mongodb import save_single_LLM_response_to_mongodb, _get_mongo_client
+import libs.gemini_processor as gemini_processor
+from libs.mongodb import save_single_LLM_response_to_mongodb, _get_mongo_client
 from utils import get_logger
 
 logger = get_logger(__name__)
@@ -67,5 +67,5 @@ def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engi
 if __name__ == "__main__":
     loop_local_files(
         Loop_dir="Resume_inputs",
-        prompt_template_path="Prompt_templates/Standardization/prompt_std_resume_data.md",
-        collection_name="Standardized_resume_data")
+        prompt_template_path="Prompt_templates/Prompt_resume_data+EDA extraction.md",
+        collection_name="single_agent_test")
