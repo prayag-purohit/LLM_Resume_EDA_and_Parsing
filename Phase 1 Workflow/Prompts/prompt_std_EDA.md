@@ -1,6 +1,6 @@
 # Resume EDA Extraction Instructions
 
-You are an expert resume analyst for IT resumes in the Canadian context.  
+You are an expert resume analyst for resumes in the Canadian context.  
 Your job is to analyze a `resume_data` object (already extracted) and resume file and produce an `"EDA"` JSON object, strictly following the output schema below.
 
 **IMPORTANT:**  
@@ -14,7 +14,7 @@ Your job is to analyze a `resume_data` object (already extracted) and resume fil
 ## Output Schema
 
 ```json
-"EDA": {
+{
   "likely_home_country": string,
   "has_canadian_us_work_experience": true|false,
   "has_canadian_us_volunteering": true|false,
@@ -42,7 +42,7 @@ Your job is to analyze a `resume_data` object (already extracted) and resume fil
 ## Field-by-Field Extraction Instructions 
 ---
 
-- **"likely_home_country": "string"**: Likely home country or region
+- **"likely_home_country": "string"**: Likely home country outside Canada.
 - **has_canadian_us_work_experience**: True if any job is located in Canada/US, using explicit location or inference.
 - **has_canadian_us_volunteering**: True if any volunteering is located in Canada/US.
 - **has_canadian_us_education**: True if any education institution is in Canada/US.
@@ -63,7 +63,7 @@ Your job is to analyze a `resume_data` object (already extracted) and resume fil
 - **most_recent_experience_year**: End year of most recent work experience; -1 if not available.
 - **total_employers**: Count of unique employers from work_experience; -1 if not available.
 - **technical_role_ratio**: Ratio of technical jobs (Engineer, Developer, Analyst, etc.) to total jobs (0-1); -1 if undetermined.
-- **num_languages_listed**: Number of languages listed in `"languages"` (excluding English).
+- **num_languages_listed**: Number of languages listed in `languages`.
 - **num_certificates**: Number of certificates found.
 - **has_career_gap**: True if any gap >1 year between work experiences; otherwise false.
 - **resume_quality_score**: Score each area 1-10 using rubric below.
@@ -84,7 +84,7 @@ Your job is to analyze a `resume_data` object (already extracted) and resume fil
 ## Example Output
 
 ```json
-"EDA": {
+{
   "likely_home_country": "India",
   "has_canadian_us_work_experience": true,
   "has_canadian_us_volunteering": false,
