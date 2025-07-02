@@ -17,7 +17,7 @@ load_dotenv()
 
 def _get_mongo_client():
     mongo_uri = os.getenv("MONGODB_URI")
-    logger.info(f"MongoDB URI: {mongo_uri}")
+    logger.info(f"MongoDB URI:{mongo_uri}")
     if not mongo_uri:
         logger.error("Error: MongoDB URI is required (MONGO_URI environment variable).")
         return None
@@ -38,7 +38,7 @@ def _clean_raw_llm_response(llm_raw_text, file_name=None):
         llm_raw_text (str): The raw text response from the LLM.
         file_name (str, optional): The name of the file being processed (for logging).
     Returns:
-        dict: Parsed JSON if successful, or ValueError if JSON is invalid.
+        dict: Parsed JSON if successful, or a dict with error info if JSON is invalid.
     """
     llm_raw_text_clean = llm_raw_text.strip()
     if llm_raw_text_clean.startswith("```json"):
@@ -47,14 +47,19 @@ def _clean_raw_llm_response(llm_raw_text, file_name=None):
         llm_raw_text_clean = llm_raw_text_clean[len("```"):].strip()
     if llm_raw_text_clean.endswith("```"):
         llm_raw_text_clean = llm_raw_text_clean[:-3].strip()
+    
     try:
         llm_raw_text_dict = json.loads(llm_raw_text_clean)
         return llm_raw_text_dict
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON for {file_name}: {e}")
+        logger.error(f"Failed to parse LLM response as JSON for {file_name}: {e}\nModel response: {llm_raw_text_clean[:5000]}")
         logger.debug(f"Problematic JSON string: {llm_raw_text_clean}")
-        # Decide how to handle: skip saving, save raw text in an error field, or raise
-        return ValueError(f"Invalid JSON format in LLM response for {file_name}. Please check the response format.")
+        # Return a serializable error dict instead of ValueError
+        return {
+            "error": f"Invalid JSON format in LLM response for {file_name}.",
+            "exception": str(e),
+            "raw_text": llm_raw_text_clean[:5000]  # Optionally truncate for storage
+        }
 
 
 # === Save to MongoDB ===
@@ -178,11 +183,12 @@ def save_llm_responses_to_mongodb(
         "prompt_token_count": 0,
         "thoughts_token_count": 0,
         "total_token_count": 0,
-        "prompt_tokens_details": [],
-        "tool_use_prompt_tokens_details": [],
     }
-
+    usage_by_agent = {}
     cleaned_by_agent: dict[str, dict] = {}
+
+    def safe_int(val):
+        return int(val) if val is not None else 0
 
     # --- 3. Clean each agent’s output & aggregate metadata ---
     for agent_name, resp in responses_by_agent.items():
@@ -197,20 +203,22 @@ def save_llm_responses_to_mongodb(
         if hasattr(resp, "model_version"):
             model_names.add(resp.model_version)
 
-        # c) sum usage metadata
+        # c) sum usage metadata and store per-agent usage (filtered)
         if hasattr(resp, "usage_metadata"):
             u = resp.usage_metadata.model_dump()
-            usage_agg["prompt_token_count"] += u.get("prompt_token_count", 0)
-            # Fix: treat None as 0 for thoughts_token_count
-            thoughts_count = u.get("thoughts_token_count", 0)
-            if thoughts_count is None:
-                thoughts_count = 0
-            usage_agg["thoughts_token_count"] += thoughts_count
-            usage_agg["total_token_count"]   += u.get("total_token_count", 0)
-            if u.get("prompt_tokens_details"):
-                usage_agg["prompt_tokens_details"].extend(u["prompt_tokens_details"])
-            if u.get("tool_use_prompt_tokens_details"):
-                usage_agg["tool_use_prompt_tokens_details"].extend(u["tool_use_prompt_tokens_details"])
+            # Only keep the desired fields
+            filtered_u = {k: u.get(k) for k in [
+                "prompt_token_count",
+                "thoughts_token_count",
+                "tool_use_prompt_token_count",
+                "total_token_count"
+            ] if k in u}
+            usage_agg["prompt_token_count"] += safe_int(u.get("prompt_token_count"))
+            usage_agg["thoughts_token_count"] += safe_int(u.get("thoughts_token_count"))
+            usage_agg["total_token_count"]   += safe_int(u.get("total_token_count"))
+            usage_by_agent[agent_name] = filtered_u
+        else:
+            usage_by_agent[agent_name] = {}
 
     # --- 4. Mongo connection ---
     close_conn = False
@@ -230,7 +238,10 @@ def save_llm_responses_to_mongodb(
             "file_hash":          file_hash,
             "model_names":        list(model_names),
             "num_agents":         len(responses_by_agent),
-            "usage_tokens":       usage_agg,
+            "usage_tokens": {
+                **usage_agg,
+                "usage_by_agent": usage_by_agent
+            },
             "timestamp":          datetime.now(),
             # embed each agent’s cleaned JSON under its key:
             **{agent: cleaned_by_agent[agent] for agent in cleaned_by_agent}
