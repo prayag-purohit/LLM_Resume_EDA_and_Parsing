@@ -67,5 +67,5 @@ def loop_local_files(Loop_dir="Resume_inputs", prompt_template_path="prompt_engi
 if __name__ == "__main__":
     loop_local_files(
         Loop_dir="Resume_inputs",
-        prompt_template_path="Prompt_templates/prompt_engineering_parsing.md",
-        collection_name="pretty_resume_QA")
+        prompt_template_path="Prompt_templates/Prompt_resume_data+EDA extraction.md",
+        collection_name="single_agent_test")

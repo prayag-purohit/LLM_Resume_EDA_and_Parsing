@@ -47,6 +47,7 @@ class GeminiProcessor:
         self.uploaded_resume_file = None
         self.prompt_template = None
         self.mongo_document = None
+        self.file_name = None  # Ensure file_name is always defined
         
     def _setup_api_client(self, api_key: Optional[str]) -> None:
         """Set up the Gemini API client."""
@@ -79,16 +80,9 @@ class GeminiProcessor:
         try:
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
-            # Extract the prompt template between triple equals (===)
-            # prompt_match = re.search(r'```\n(.*?)\n```', content, re.DOTALL)
-            # Removed on 6/25 because it was messing with ``` in the prompt template (code blocks)
-            if content:
-                self.prompt_template = content.strip()
-                logger.info(f"Successfully loaded prompt template from {prompt_file_path}")
-                return self.prompt_template
-            else:
-                raise ValueError(f"No Content found in promopt template file: {prompt_file_path}")
+            self.prompt_template = content
+            logger.info(f"Successfully loaded prompt template from {prompt_file_path}")
+            return self.prompt_template
         except FileNotFoundError:
             logger.error(f"Prompt template file not found: {prompt_file_path}")
             return None
@@ -201,7 +195,7 @@ class GeminiProcessor:
             try:
                 os.makedirs("text_output", exist_ok=True)
                 timestamp_str = datetime.now().strftime("%d-%m-%y_%H-%M")
-                if self.uploaded_resume_file:
+                if self.uploaded_resume_file and self.file_name:
                     base_name = os.path.splitext(os.path.basename(self.file_name))[0]
                 else: 
                     base_name = "MongoDB_document"
