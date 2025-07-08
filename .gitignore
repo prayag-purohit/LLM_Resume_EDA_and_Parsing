@@ -1,10 +1,10 @@
 .venv
 .env
-logs/*
+*/logs/*
 __pycache__
 Resume_inputs/*
 text_output/*
 Processed_resumes/*
 Jupyternotebooks/*
 Exported_resumes/*
-data/*
+*/data/*
