@@ -1,8 +1,8 @@
 """
-Resume Extraction and EDA Multi-Agent Workflow
+Resume Extraction and Key Metrics Multi-Agent Workflow
 =============================================
 
-This script automates the process of extracting structured data from resumes using multiple Gemini LLM agents, performing Exploratory Data Analysis (EDA), and validating the results. It is designed for batch processing of resume files and saving results to MongoDB.
+This script automates the process of extracting structured data from resumes using multiple Gemini LLM agents, performing Key Metrics Analysis, and validating the results. It is designed for batch processing of resume files and saving results to MongoDB.
 
 Workflow Overview
 -----------------
@@ -10,24 +10,24 @@ Workflow Overview
 2. **Conversion**: Converts `.docx` resumes to PDF and archives the originals.
 3. **Upload**: Uploads each resume to the root Gemini agent.
 4. **First Pass (Resume Data Extraction)**: Uses a Gemini agent to extract structured data from the resume using a prompt template.
-5. **Second Pass (EDA)**: Runs EDA on the extracted data using another Gemini agent and a separate prompt template.
+5. **Second Pass (Key Metrics Analysis)**: Runs key metrics analysis on the extracted data using another Gemini agent and a separate prompt template.
 6. **Third Pass (Validation)**: Validates the extracted and analyzed data using a validation agent.
 7. **Saving Results**: Saves all LLM responses to MongoDB. If saving fails, raw responses are logged for debugging.
 8. **Cleanup**: Deletes uploaded files from the agent and moves processed files to the archive directory.
 
 **Agent Retry Logic and Pipeline Re-runs**
 ------------------------------------------
-- Each agent step (Extraction, EDA, Validation) includes robust retry logic:
+- Each agent step (Extraction, Key Metrics, Validation) includes robust retry logic:
     - If the LLM response is empty, missing, or contains invalid JSON, the agent will retry up to 2 times (`MAX_RETRIES`).
     - All parsing errors and retry attempts are logged for traceability.
-- If the validation agent returns a `validation_score` less than 7, the entire extraction/EDA/validation pipeline is re-run (up to 2 additional times per file).
+- If the validation agent returns a `validation_score` less than 7, the entire extraction/key_metrics/validation pipeline is re-run (up to 2 additional times per file).
     - Each pipeline re-run also includes per-agent retries as above.
     - Validation flags are logged when the score is low.
 - Files are only moved to the processed directory after all retries and re-runs are complete, ensuring only successfully processed files are archived.
 
 Key Components
 --------------
-- **GeminiProcessor**: Handles LLM interactions for each task (extraction, EDA, validation).
+- **GeminiProcessor**: Handles LLM interactions for each task (extraction, key metrics, validation).
 - **MongoDB Integration**: Saves structured responses for further analysis.
 - **Logging**: Tracks progress and errors for each file, including retry and re-run attempts.
 - **Error Handling & Retries**: Retries LLM calls if invalid JSON is detected in responses, and re-runs the pipeline if validation fails.
@@ -99,7 +99,7 @@ logger = get_logger(__name__)
 # -----------------------------
 # root_gemini: Handles file uploads (shared with other agents)
 # gemini_resume_data: Extracts structured data from resumes
-# gemini_eda: Performs Exploratory Data Analysis (EDA)
+# gemini_key_metrics: Performs Key Metrics Analysis
 # gemini_validation: Validates the extracted and analyzed data
 root_gemini = gemini_processor.GeminiProcessor(
     model_name="gemini-2.5-flash",
@@ -113,7 +113,7 @@ gemini_resume_data = gemini_processor.GeminiProcessor(
     enable_google_search=True
 )
 
-gemini_eda = gemini_processor.GeminiProcessor(
+gemini_key_metrics = gemini_processor.GeminiProcessor(
     model_name='gemini-2.5-flash',
     temperature=0.4,
     enable_google_search=False
@@ -178,9 +178,9 @@ if __name__ == "__main__":
                 file_path = convert_to_pdf(file_path, ARCHIVE_ROOT)
             processed_filename = os.path.basename(file_path)
             resume_data_response = None
-            eda_response = None
+            key_metrics_response = None
             resume_data_retries = 0
-            eda_retries = 0
+            key_metrics_retries = 0
             validation_retries = 0
             try:
                 # Step 2: Upload file to root Gemini agent
@@ -214,31 +214,31 @@ if __name__ == "__main__":
             except Exception as e: 
                 logger.error(f"Failed in first pass, file: {filename}, ERROR: {e}")
 
-            # Step 4: EDA (Second Pass)
-            logger.info(f'Conducting second pass (EDA) for {processed_filename}')
+            # Step 4: Key Metrics (Second Pass)
+            logger.info(f'Conducting second pass (key metrics) for {processed_filename}')
             try:
-                eda_prompt = gemini_eda.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_EDA.md')
-                eda_prompt = eda_prompt + "\nThe LLM Response:" + resume_data_response.text
-                gemini_eda.uploaded_resume_file = root_gemini.uploaded_resume_file
+                key_metrics_prompt = gemini_key_metrics.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_key_metrics.md')
+                key_metrics_prompt = key_metrics_prompt + "\nThe LLM Response:" + resume_data_response.text
+                gemini_key_metrics.uploaded_resume_file = root_gemini.uploaded_resume_file
                 attempt = 0
                 while attempt < MAX_RETRIES:
-                    eda_response = gemini_eda.generate_content(prompt = eda_prompt)
+                    key_metrics_response = gemini_key_metrics.generate_content(prompt = key_metrics_prompt)
                     parsed = None
                     try:
                         from libs.mongodb import _clean_raw_llm_response
-                        parsed = _clean_raw_llm_response(eda_response.text, processed_filename)
+                        parsed = _clean_raw_llm_response(key_metrics_response.text, processed_filename)
                     except Exception as e:
-                        logger.error(f"Error parsing eda_response: {e}")
+                        logger.error(f"Error parsing key_metrics_response: {e}")
                     # Retry if invalid JSON is detected
                     if parsed and "error" in parsed and "Invalid JSON format" in parsed["error"]:
-                        logger.warning(f"Invalid JSON detected in eda_response, retrying (attempt {attempt+1}) for {processed_filename}...")
+                        logger.warning(f"Invalid JSON detected in key_metrics_response, retrying (attempt {attempt+1}) for {processed_filename}...")
                         attempt += 1
-                        eda_retries = attempt
+                        key_metrics_retries = attempt
                         continue
                     break
-                if eda_retries > 0:
-                    logger.info(f"Second pass (EDA) for {processed_filename} required {eda_retries} retry(ies).")
-                gemini_eda.save_generated_content(response=eda_response, output_dir=TEXT_OUTPUT_DIR)
+                if key_metrics_retries > 0:
+                    logger.info(f"Second pass (key metrics) for {processed_filename} required {key_metrics_retries} retry(ies).")
+                gemini_key_metrics.save_generated_content(response=key_metrics_response, output_dir=TEXT_OUTPUT_DIR)
             except Exception as e:
                 logger.error(f"Failed in second pass, file: {filename}, ERROR: {e}")
             
@@ -250,7 +250,7 @@ if __name__ == "__main__":
                 validation_prompt = gemini_validation.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_validation.md')
                 # Compose the prompt with references to both previous responses
                 validation_prompt = validation_prompt + "\nResume Data Response:" + resume_data_response.text
-                validation_prompt = validation_prompt + "\nEDA Response:" + eda_response.text
+                validation_prompt = validation_prompt + "\nKey Metrics Response:" + key_metrics_response.text
                 gemini_validation.uploaded_resume_file = root_gemini.uploaded_resume_file
                 attempt = 0
                 while attempt < MAX_RETRIES:
@@ -275,7 +275,7 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"Failed in third pass (validation agent), file: {filename}, ERROR: {e}")
 
-            # If validation_score is present and less than 7, re-run the extraction/EDA/validation loop (up to 2 times)
+            # If validation_score is present and less than 7, re-run the extraction/key_metrics/validation loop (up to 2 times)
             rerun_count = 0
             MAX_RERUNS = 2
             while validation_score is not None:
@@ -290,7 +290,7 @@ if __name__ == "__main__":
                         validation_flags = parsed.get("validation_flags")
                     logger.warning(f"Validation score {score_val} < 7 for {processed_filename}. Validation flags: {validation_flags}")
                     rerun_count += 1
-                    logger.info(f"Re-running extraction, EDA, and validation for {processed_filename} due to low validation score (attempt {rerun_count}).")
+                    logger.info(f"Re-running extraction, key metrics, and validation for {processed_filename} due to low validation score (attempt {rerun_count}).")
                     try:
                         # --- Extraction Agent with Retry ---
                         gemini_resume_data.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_resume_data.md')
@@ -318,36 +318,36 @@ if __name__ == "__main__":
                             continue
                         logger.info(f"Extraction re-run complete for {processed_filename}.");
 
-                        # --- EDA Agent with Retry ---
-                        eda_prompt = gemini_eda.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_EDA.md')
-                        eda_prompt = eda_prompt + "\nThe LLM Response:" + resume_data_response.text
-                        gemini_eda.uploaded_resume_file = root_gemini.uploaded_resume_file
-                        eda_attempt = 0
-                        eda_response = None
-                        while eda_attempt < MAX_RETRIES:
-                            eda_response = gemini_eda.generate_content(prompt=eda_prompt)
-                            parsed_eda = None
+                        # --- Key Metrics Agent with Retry ---
+                        key_metrics_prompt = gemini_key_metrics.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_key_metrics.md')
+                        key_metrics_prompt = key_metrics_prompt + "\nThe LLM Response:" + resume_data_response.text
+                        gemini_key_metrics.uploaded_resume_file = root_gemini.uploaded_resume_file
+                        key_metrics_attempt = 0
+                        key_metrics_response = None
+                        while key_metrics_attempt < MAX_RETRIES:
+                            key_metrics_response = gemini_key_metrics.generate_content(prompt=key_metrics_prompt)
+                            parsed_key_metrics = None
                             try:
                                 from libs.mongodb import _clean_raw_llm_response
-                                parsed_eda = _clean_raw_llm_response(eda_response.text, processed_filename)
+                                parsed_key_metrics = _clean_raw_llm_response(key_metrics_response.text, processed_filename)
                             except Exception as e:
-                                logger.error(f"Error parsing eda_response (re-run): {e}")
-                            if (parsed_eda and "error" in parsed_eda and "Invalid JSON format" in parsed_eda["error"]) or not eda_response or not hasattr(eda_response, 'text') or getattr(eda_response, 'text', None) in (None, ""):
-                                logger.warning(f"EDA re-run: Invalid/empty response, retrying (attempt {eda_attempt+1}) for {processed_filename}...")
-                                eda_attempt += 1
+                                logger.error(f"Error parsing key_metrics_response (re-run): {e}")
+                            if (parsed_key_metrics and "error" in parsed_key_metrics and "Invalid JSON format" in parsed_key_metrics["error"]) or not key_metrics_response or not hasattr(key_metrics_response, 'text') or getattr(key_metrics_response, 'text', None) in (None, ""):
+                                logger.warning(f"Key metrics re-run: Invalid/empty response, retrying (attempt {key_metrics_attempt+1}) for {processed_filename}...")
+                                key_metrics_attempt += 1
                                 continue
                             break
-                        if eda_attempt > 0:
-                            logger.info(f"EDA re-run for {processed_filename} required {eda_attempt} retry(ies).")
-                        if not eda_response or not hasattr(eda_response, 'text') or getattr(eda_response, 'text', None) in (None, ""):
-                            logger.error(f"EDA re-run failed for {processed_filename}: No response or missing text after retries. Will retry re-run loop if attempts remain.")
+                        if key_metrics_attempt > 0:
+                            logger.info(f"Key metrics re-run for {processed_filename} required {key_metrics_attempt} retry(ies).")
+                        if not key_metrics_response or not hasattr(key_metrics_response, 'text') or getattr(key_metrics_response, 'text', None) in (None, ""):
+                            logger.error(f"Key metrics re-run failed for {processed_filename}: No response or missing text after retries. Will retry re-run loop if attempts remain.")
                             continue
-                        logger.info(f"EDA re-run complete for {processed_filename}.");
+                        logger.info(f"Key metrics re-run complete for {processed_filename}.");
 
                         # --- Validation Agent with Retry ---
                         validation_prompt = gemini_validation.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_validation.md')
                         validation_prompt = validation_prompt + "\nResume Data Response:" + resume_data_response.text
-                        validation_prompt = validation_prompt + "\nEDA Response:" + eda_response.text
+                        validation_prompt = validation_prompt + "\nKey Metrics Response:" + key_metrics_response.text
                         gemini_validation.uploaded_resume_file = root_gemini.uploaded_resume_file
                         validation_attempt = 0
                         validation_response = None
@@ -396,8 +396,8 @@ if __name__ == "__main__":
         llm_responses_dict = {}
         if resume_data_response is not None:
             llm_responses_dict["resume_data"] = resume_data_response
-        if eda_response is not None:
-            llm_responses_dict["EDA"] = eda_response
+        if key_metrics_response is not None:
+            llm_responses_dict["key_metrics"] = key_metrics_response
         if validation_response is not None:
             llm_responses_dict["validation"] = validation_response
 
@@ -418,9 +418,9 @@ if __name__ == "__main__":
                 if resume_data_response is not None and hasattr(resume_data_response, 'text'):
                     with open(os.path.join(raw_log_dir, f"{processed_filename}_resume_data_raw.txt"), "w", encoding="utf-8") as f:
                         f.write(resume_data_response.text)
-                if eda_response is not None and hasattr(eda_response, 'text'):
-                    with open(os.path.join(raw_log_dir, f"{processed_filename}_eda_raw.txt"), "w", encoding="utf-8") as f:
-                        f.write(eda_response.text)
+                if key_metrics_response is not None and hasattr(key_metrics_response, 'text'):
+                    with open(os.path.join(raw_log_dir, f"{processed_filename}_key_metrics_raw.txt"), "w", encoding="utf-8") as f:
+                        f.write(key_metrics_response.text)
         
         # Step 7: Cleanup - delete uploaded file and move processed file
         root_gemini.delete_uploaded_file()
