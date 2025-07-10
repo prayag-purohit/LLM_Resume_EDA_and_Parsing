@@ -12,7 +12,7 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
 1.  **Analyze:** Carefully read the entire Base Resume to understand its structure, tone, and the candidate's professional profile.
 
 2.  **Integrate Treatment:** Add the new information from the Treatment Instructions into the resume.
-    * If adding education, place it at the top of the `education` array.
+    * If adding education, place it at the top of the `education` array. Not under the `certifications` array.
     * If adding experience, place it at the top of the `work_experience` array.
 
 3.  **Refine for Anonymity:** To prevent the resume from being an exact duplicate of the control, you will subtly rephrase some descriptive text. Follow these rules precisely:
@@ -23,7 +23,7 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
 
 4.  **Preserve Structure:** The final output must be a single, valid JSON object that strictly adheres to the structure of the original Base Resume JSON. Do not add, remove, or rename any keys.
 
-5.  **Generate Output:** Return only the complete, modified `resume_data` object as a single JSON object. Do not include any conversational text or explanations.
+5.  **Generate Output:** Return only the complete, modified `resume_data` object as a single JSON object with the given style. Do not include any conversational text or explanations.
 
 
 ## INPUTS
@@ -33,9 +33,11 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
 2. The treatment(s) that you're supposed to add to the resume:
 {Treatment_object}
 
+3. The style of rephrasing:
+{style_guide}
+
 ## Output Schema
 ```json
-{
 "resume_data": {
   "basics": {
     "name": "",
@@ -48,7 +50,7 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
   },
   "skills": [
     {
-      "name": "",
+      "skill_group": "",
       "keywords": [""]
     }
   ],
@@ -58,13 +60,14 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
       "position": "",
       "startDate": "",
       "endDate": "",
+      "work_summary": "",
       "highlights": [""],
       "location": ""
     }
   ],
   "volunteer_experience": [
     {
-      "company": "",
+      "company": "",      
       "position": "",
       "startDate": "",
       "endDate": "",
@@ -80,7 +83,8 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
       "studyType": "",
       "startDate": "",
       "endDate": "",
-      "score": ""
+      "score": "",
+      "coursework": [""]
     }
   ],
   "certificates": [
@@ -97,6 +101,4 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
     }
   ]
 }
-}
 ```
-

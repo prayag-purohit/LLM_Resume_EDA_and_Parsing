@@ -20,11 +20,13 @@
 # TODO:
 # [ ] Implement retry logic for low similarity scores.
 # [ ] Add logging, and error handling.
-# [ ] Since the model does not get data for previous treatments, we have to ensure that all treatments are rephrased slightly differently.
-#     - This can be done by adding a random seed to the rephrasing prompt (can we)
-#     - Alternatively, we can add a langchain mechanism that gives all previous treatments to the model as context.
+# [ ] Add a failed files array to track files that failed to process.
 # [ ] Add another agent that can create 4 company name lists for each resume to reduce the risk of experiment detection or flags by ATS systems. This can introduce confounding variables, caution
-# [ ] Fix similarity score, it is 0 for all resumes, which is not expected.
+# [*] Since the model does not get data for previous treatments, we have to ensure that all treatments are rephrased slightly differently.
+#     [*] This can be done by adding a random seed to the rephrasing prompt (can we)
+#     [O] (Too complex) Alternatively, we can add a langchain mechanism that gives all previous treatments to the model as context.
+# [*] Fix similarity score, it is 0 for all resumes, which is not expected.
+# [*] Add the source resume data to the target collection as well
 
 
 import sys
@@ -58,6 +60,14 @@ GEMINI_TEMPERATURE = 0.7
 ENABLE_GOOGLE_SEARCH = False
 PROMPT_TEMPLATE_PATH = "Phase 2 Workflow/Prompts/prompt_treatment_generation.md"
 MAX_RETRIES = 2
+STYLE_MODIFIERS = [
+    "using strong, action-oriented verbs and focusing on quantifiable outcomes",
+    "using a direct, concise, and professional tone, prioritizing clarity and brevity",
+    "by emphasizing collaborative efforts and cross-functional teamwork",
+    "by highlighting strategic thinking and the business impact of the work",
+    "by describing the technical aspects of the work with more precision and detail",
+    "by framing the accomplishments as a narrative of challenges, actions, and results"
+]
 
 # Treatment file paths
 TREATMENT_CEC_FILE = "Phase 2 Workflow/Education_treatment_dummy.xlsx"
@@ -68,9 +78,10 @@ cec_treatment_df = cec_treatment_df[cec_treatment_df['sector'] == SECTOR].reset_
 cwe_treatment_df = pd.read_excel(TREATMENT_CWE_FILE)
 cwe_treatment_df = cwe_treatment_df[cwe_treatment_df['sector'] == SECTOR].reset_index(drop=True)
 
-
 # Load the model once to be reused in the loop for cosine similarity calculations
-SIMILARITY_MODEL = SentenceTransformer('all-MiniLM-L6-v2')
+SIMILARITY_MODEL = SentenceTransformer(
+    r'Phase 2 Workflow\models\all-MiniLM-L6-v2'
+)
 
 def extract_rephrased_text(resume_data):
     text_parts = []
@@ -96,81 +107,103 @@ def calculate_focused_similarity(control_resume_data, treated_resume_data):
     return score
 
 def select_and_prepare_treatments(
-    cec_treatment_df,
-    cwe_treatment_df,
-    source_resume_data,
-    treatment_prompt,
+    cec_treatment_df: pd.DataFrame,
+    cwe_treatment_df: pd.DataFrame,
+    source_resume_data: dict,
+    treatment_prompt_template: str,
+    style_modifiers: list[str]
 ):
     """
-    Selects random treatments for Canadian Education (CEC) and Canadian Work Experience (CWE),
-    and prepares treatment prompts with corresponding treatment metadata for a resume.
+    Selects random treatments, assigns unique style modifiers, and prepares prompts
+    for the 3 treated resume variations (Type I, Type II, Type III).
+
+    The 'Control' version is the original source resume and is handled separately.
 
     Args:
-        cec_treatment_df (pd.DataFrame): DataFrame containing CEC treatments for the sector.
-        cwe_treatment_df (pd.DataFrame): DataFrame containing CWE treatments for the sector.
-        source_resume_data (dict): Resume data to be treated.
-        treatment_prompt (str): Prompt template with placeholders for resume and treatment.
-        logger (logging.Logger, optional): Logger instance for logging messages.
+        cec_treatment_df: DataFrame with Canadian Education treatments.
+        cwe_treatment_df: DataFrame with Canadian Work Experience treatments.
+        source_resume_data: The original resume data to be treated.
+        treatment_prompt_template: Prompt template with placeholders for resume,
+                                   treatment, and style modifier.
+        style_modifiers: A list of style instructions for rephrasing.
 
     Returns:
-        dict: Dictionary with keys 'I', 'II', 'III', each mapping to a dictionary with:
-              - 'prompt': The prepared treatment prompt.
-              - 'treatment_applied': The chosen treatment details as a JSON-compatible dict.
-            Returns None if treatments are unavailable.
+        A dictionary where keys are treatment types ('Type_I', 'Type_II', 'Type_III')
+        and values are dicts containing the final 'prompt' and 'treatment_applied' info.
+        Returns None if treatments are unavailable.
     """
-    # Check if treatment DataFrames are empty
     if cec_treatment_df.empty or cwe_treatment_df.empty:
-        logger.error("No treatments available for Canadian Education or Canadian Work Experience.")
+        logger.error("No treatments available for CEC or CWE.")
         return None
 
-    # Select two random treatments for CEC and CWE
-    random_cec_treatments = cec_treatment_df.sample(n=2, replace=False).to_dict(orient='records')
-    logger.info(f"Selected Canadian Education treatments: {random_cec_treatments}")
-    random_cwe_treatments = cwe_treatment_df.sample(n=2, replace=False).to_dict(orient='records')
-    logger.info(f"Selected Canadian Work Experience treatments: {random_cwe_treatments}")
+    # --- 1. Select all treatments needed for this run ---
+    try:
+        # Select two unique treatments for CEC and CWE
+        cec_treatments = cec_treatment_df.sample(n=2, replace=False).to_dict('records')
+        cwe_treatments = cwe_treatment_df.sample(n=2, replace=False).to_dict('records')
+    except ValueError:
+        logger.error("Not enough unique treatments available in the dataframes to sample.")
+        return None
 
-    # Initialize treatment prompts dictionary
+    # --- 2. Prepare for style assignment ---
+    # We now need 3 unique styles for the 3 treated versions.
+    if len(style_modifiers) < 3:
+        logger.error("Not enough style modifiers to ensure unique styles for all treatments.")
+        return None
+    shuffled_styles = random.sample(style_modifiers, 3)
+
+    # --- 3. Prepare prompts for each treatment type ---
     treatment_prompts = {}
-
-    # Prepare base prompt with resume data
-    base_prompt = treatment_prompt.replace("{JSON_resume_object}", str(source_resume_data))
-
-    # Select first treatment for Education (I)
-    chosen_cec_idx = random.choice([0, 1])
-    education_treatment_prompt = base_prompt.replace(
-        "{Treatment_object}", str(random_cec_treatments[chosen_cec_idx])
+    
+    # Prepare the base prompt with the resume data, which is common to all versions
+    base_prompt = treatment_prompt_template.replace(
+        "{JSON_resume_object}", json.dumps(source_resume_data, indent=2)
     )
+
+    # a) Prepare "Type_I" (CEC)
+    cec_treatment_idx = random.randint(0, 1)  # Randomly select one of the two CEC treatments
+    cec_treatment = cec_treatments[cec_treatment_idx]  # Randomly select one of the two CEC treatments
+    type_i_prompt = base_prompt.replace("{Treatment_object}", str(cec_treatment))
+    type_i_prompt = type_i_prompt.replace("{style_guide}", shuffled_styles.pop())
     treatment_prompts["Type_I"] = {
-        "prompt": education_treatment_prompt,
-        "treatment_applied": {"Canadian_Education": random_cec_treatments[chosen_cec_idx]}
+        "prompt": type_i_prompt,
+        "treatment_applied": {"Canadian_Education": cec_treatment}
     }
+    cec_treatment_idx = 1 - cec_treatment_idx  # Get the other CEC treatment for Type III
 
-    # Select first treatment for Work Experience (II)
-    chosen_cwe_idx = random.choice([0, 1])
-    work_experience_treatment_prompt = base_prompt.replace(
-        "{Treatment_object}", str(random_cwe_treatments[chosen_cwe_idx])
-    )
+    # b) Prepare "Type_II" (CWE)
+    cwe_treatment_idx = random.randint(0, 1)
+    cwe_treatment = cwe_treatments[cwe_treatment_idx]
+    type_ii_prompt = base_prompt.replace("{Treatment_object}", str(cwe_treatment))
+    type_ii_prompt = type_ii_prompt.replace("{style_guide}", shuffled_styles.pop())
     treatment_prompts["Type_II"] = {
-        "prompt": work_experience_treatment_prompt,
-        "treatment_applied": {"Canadian_Work_Experience": random_cwe_treatments[chosen_cwe_idx]}
+        "prompt": type_ii_prompt,
+        "treatment_applied": {"Canadian_Work_Experience": cwe_treatment}
     }
+    cwe_treatment_idx = 1 - cwe_treatment_idx  # Get the other CWE treatment for Type III
 
-    # Use the other treatments for mixed treatment (III)
-    mixed_cec_idx = 1 - chosen_cec_idx  # Select the other CEC treatment
-    mixed_cwe_idx = 1 - chosen_cwe_idx  # Select the other CWE treatment
-    mixed_treatment = {
-        "Canadian_Education": random_cec_treatments[mixed_cec_idx],
-        "Canadian_Work_Experience": random_cwe_treatments[mixed_cwe_idx]
+    # c) Prepare "Type_III" (CEC + CWE)
+    # Use the *other* selected treatments to avoid overlap within a single resume set
+    mixed_treatment_payload = {
+        "task": "ADD_EDUCATION_AND_EXPERIENCE",
+        "payload": {
+            "education": cec_treatments[cec_treatment_idx],
+            "experience": cwe_treatments[cwe_treatment_idx]
+        }
     }
-    education_work_experience_treatment_prompt = base_prompt.replace(
-        "{Treatment_object}", str(mixed_treatment)
-    )
+    type_iii_prompt = base_prompt.replace("{Treatment_object}", str(mixed_treatment_payload))
+    type_iii_prompt = type_iii_prompt.replace("{style_guide}", shuffled_styles.pop())
     treatment_prompts["Type_III"] = {
-        "prompt": education_work_experience_treatment_prompt,
-        "treatment_applied": mixed_treatment
+        "prompt": type_iii_prompt,
+        "treatment_applied": {
+            "Canadian_Education": cec_treatments[1],
+            "Canadian_Work_Experience": cwe_treatments[1]
+        }
     }
 
+    logger.info(f"Successfully prepared 3 unique treatment prompts for the resume.")
     return treatment_prompts
+
 
 #=============================================================================================================================================================================
 
@@ -189,7 +222,7 @@ logger.info(f"Found {len(sector_files)} files for sector: {SECTOR}.")
 
 # 2. Initialize the GeminiProcessor
 treatment_model = GeminiProcessor(
-    model_name= GEMINI_MODEL_NAME,
+    model_name=GEMINI_MODEL_NAME,
     temperature=GEMINI_TEMPERATURE,
     enable_google_search=ENABLE_GOOGLE_SEARCH
 )
@@ -220,6 +253,19 @@ for file in sector_files[0:1]:
         'source_file_hash': file_data.get('file_hash'),
     }
 
+    control_resume_target_collection = {
+            **common_metadata, # Add the common data
+            "document_id": f"{file}_control",
+            "treatment_type": "control",
+            "generation_timestamp": datetime.datetime.now(),
+            "validation": {
+                "focused_similarity_score": "",
+                "passed_threshold": "N/A"
+            },
+            "treatment_applied": "N/A",
+            "resume_data": source_resume_data['resume_data'] 
+    }
+    documents_to_save.append(control_resume_target_collection)
 
     # Get two random treatments for Canadian Education and Canadian Work Experience
     treatment_prompts = select_and_prepare_treatments(
@@ -227,6 +273,7 @@ for file in sector_files[0:1]:
         cwe_treatment_df,
         source_resume_data,
         treatment_prompt,
+        STYLE_MODIFIERS
     )
     if not treatment_prompts:
         logger.error(f"No treatments available for file {file}. Skipping.")
@@ -251,6 +298,7 @@ for file in sector_files[0:1]:
         focused_similarity_score = calculate_focused_similarity(
             source_resume_data['resume_data'], treated_resume_data['resume_data']
         )
+        focused_similarity_score = float(focused_similarity_score)
         
         if focused_similarity_score < 0.85:
             logger.warning(f"Low similarity score ({focused_similarity_score}) for treatment {key} in file {file}. Please add retry logic")
