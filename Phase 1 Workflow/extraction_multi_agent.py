@@ -108,13 +108,13 @@ root_gemini = gemini_processor.GeminiProcessor(
 )
 
 gemini_resume_data = gemini_processor.GeminiProcessor(
-    model_name="gemini-2.5-flash",
+    model_name="gemini-2.5-pro",
     temperature=0.4,
     enable_google_search=True
 )
 
 gemini_key_metrics = gemini_processor.GeminiProcessor(
-    model_name='gemini-2.5-flash',
+    model_name="gemini-2.5-pro",
     temperature=0.4,
     enable_google_search=False
 )
@@ -247,14 +247,27 @@ if __name__ == "__main__":
             validation_response = None
             validation_score = None
             try:
+                # Load main validation prompt
                 validation_prompt = gemini_validation.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_validation.md')
-                # Compose the prompt with references to both previous responses
-                validation_prompt = validation_prompt + "\nResume Data Response:" + resume_data_response.text
-                validation_prompt = validation_prompt + "\nKey Metrics Response:" + key_metrics_response.text
+                # Load reference prompts as context
+                with open('Phase 1 Workflow/Prompts/prompt_std_resume_data.md', 'r', encoding='utf-8') as f:
+                    resume_data_reference = f.read()
+                with open('Phase 1 Workflow/Prompts/prompt_std_key_metrics.md', 'r', encoding='utf-8') as f:
+                    key_metrics_reference = f.read()
+                # Compose the full prompt with references clearly marked
+                full_validation_prompt = (
+                    validation_prompt +
+                    "\n\n---\nREFERENCE: Resume Data Extraction Schema and Instructions (DO NOT FOLLOW FOR OUTPUT FORMAT)\n" +
+                    resume_data_reference +
+                    "\n\n---\nREFERENCE: Key Metrics Extraction Schema and Logic (DO NOT FOLLOW FOR OUTPUT FORMAT)\n" +
+                    key_metrics_reference +
+                    "\n\nResume Data Response:" + resume_data_response.text +
+                    "\nKey Metrics Response:" + key_metrics_response.text
+                )
                 gemini_validation.uploaded_resume_file = root_gemini.uploaded_resume_file
                 attempt = 0
                 while attempt < MAX_RETRIES:
-                    validation_response = gemini_validation.generate_content(prompt=validation_prompt)
+                    validation_response = gemini_validation.generate_content(prompt=full_validation_prompt)
                     parsed = None
                     try:
                         from libs.mongodb import _clean_raw_llm_response
@@ -345,14 +358,26 @@ if __name__ == "__main__":
                         logger.info(f"Key metrics re-run complete for {processed_filename}.");
 
                         # --- Validation Agent with Retry ---
+                        # Reload reference prompts for each re-run
                         validation_prompt = gemini_validation.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_validation.md')
-                        validation_prompt = validation_prompt + "\nResume Data Response:" + resume_data_response.text
-                        validation_prompt = validation_prompt + "\nKey Metrics Response:" + key_metrics_response.text
+                        with open('Phase 1 Workflow/Prompts/prompt_std_resume_data.md', 'r', encoding='utf-8') as f:
+                            resume_data_reference = f.read()
+                        with open('Phase 1 Workflow/Prompts/prompt_std_key_metrics.md', 'r', encoding='utf-8') as f:
+                            key_metrics_reference = f.read()
+                        full_validation_prompt = (
+                            validation_prompt +
+                            "\n\n---\nREFERENCE: Resume Data Extraction Schema and Instructions (DO NOT FOLLOW FOR OUTPUT FORMAT)\n" +
+                            resume_data_reference +
+                            "\n\n---\nREFERENCE: Key Metrics Extraction Schema and Logic (DO NOT FOLLOW FOR OUTPUT FORMAT)\n" +
+                            key_metrics_reference +
+                            "\n\nResume Data Response:" + resume_data_response.text +
+                            "\nKey Metrics Response:" + key_metrics_response.text
+                        )
                         gemini_validation.uploaded_resume_file = root_gemini.uploaded_resume_file
                         validation_attempt = 0
                         validation_response = None
                         while validation_attempt < MAX_RETRIES:
-                            validation_response = gemini_validation.generate_content(prompt=validation_prompt)
+                            validation_response = gemini_validation.generate_content(prompt=full_validation_prompt)
                             parsed_validation = None
                             try:
                                 from libs.mongodb import _clean_raw_llm_response

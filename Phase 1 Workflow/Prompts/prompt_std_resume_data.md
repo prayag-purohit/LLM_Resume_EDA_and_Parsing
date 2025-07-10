@@ -9,7 +9,7 @@ Your job is to extract all relevant information from an anonymized resume, produ
 ---
 ## General Instructions
 
-- STRICTLY follow the schema and instructions for each section.
+- Ensure the returned JSON is valid and strictly matches the output schema and field order.
 - Do not invent or hallucinate data. If any field is missing in the resume, leave it as an `""`, `null`, `-1`, `[]` or `false` as appropriate. Do not use any example values as defaults.
 - For each field, extract directly from the resume if available.
 - If a field (such as `summary`) is missing or incomplete, generate a concise, professional version based on the available resume content.
@@ -52,25 +52,24 @@ Your job is to extract all relevant information from an anonymized resume, produ
   },
   "skills": [
     {
-      "name": "",
+      "skill_group": "",
       "keywords": [""]
     }
   ],
   "work_experience": [
     {
       "company": "",
-      "client": "",
       "position": "",
       "startDate": "",
       "endDate": "",
+      "work_summary": "",
       "highlights": [""],
       "location": ""
     }
   ],
   "volunteer_experience": [
     {
-      "company": "",
-      "client": "",
+      "company": "",      
       "position": "",
       "startDate": "",
       "endDate": "",
@@ -86,7 +85,8 @@ Your job is to extract all relevant information from an anonymized resume, produ
       "studyType": "",
       "startDate": "",
       "endDate": "",
-      "score": ""
+      "score": "",
+      "coursework": [""]
     }
   ],
   "certificates": [
@@ -107,7 +107,16 @@ Your job is to extract all relevant information from an anonymized resume, produ
   "likely_home_country": string,
   "has_missing_locations": true|false,
   "location_source": "extracted" | "inferred" | "web_searched",
-  "fallback_reason": string
+  "fallback_reason": string,
+  "unmapped_resume_sections": [
+    {
+      "category": "Project" | "Award" | "Achievement" | "Client" | "Publication" | "Other",
+      "source_section": "",
+      "title": "",
+      "description": "",
+      "date": ""
+    }
+  ]
 }
 ```
 ---
@@ -119,11 +128,10 @@ Your job is to extract all relevant information from an anonymized resume, produ
 - All PII fields ( `name`, `email`, `phone`, `city`, `region`) must be empty (`""`).
 - `label`: Job title/role if stated.
 - `summary`: Extract if present, else write a 2–3 sentence summary based on experience, education, and skills.
-- `city`, `region`: Extract if present, else leave as `""`.
 
 #### skills
 - Array of objects:
-  - `name`: Broad skill group/category (e.g., "Programming Languages", "Cloud Platforms", "Soft Skills"). Infer if not stated.
+  - `skill_group`: Broad skill group/category (e.g., "Programming Languages", "Cloud Platforms", "Soft Skills"). Infer if not stated.
   - `keywords`: Array of specific skills, tools, or technologies in that group.
 - Correct spelling errors and minor inconsistencies in `keywords`. Use the most widely accepted spelling or naming convention for each skill/technology.
 - If relevant skills, tools, or technologies are mentioned in work experience highlights, education, or certificates but are missing from the skills section, add them to the appropriate category in the skills list without repetition.
@@ -131,23 +139,26 @@ Your job is to extract all relevant information from an anonymized resume, produ
 - Group keywords logically. Deduplicate similar or identical skills. Use "Other Skills" for uncategorizable or miscellaneous items.
 - Standardize capitalization (e.g., "JavaScript", not "javascript" or "Javascript") and use canonical names for well-known technologies.
 - If a skill is listed multiple times (with small variations), use the most accurate and widely recognized name.
+- Do not infer or expand skills based on position/title unless the specific skill/tool is explicitly mentioned in the resume.
+
 
 
 #### work_experience
 - Only regular work experiences. 
 - If any experience is described as volunteering or is mentioned anywhere in the experience, place it under the `volunteer_experience ` section instead.
 - For each:
-  - `company`, `client`, `position`, `startDate` ("YYYY-MM" or "YYYY-01" if only year), `endDate` (same format; `null` if ongoing), `highlights` (see below), `location` (extract/search/infer as per general instructions, else `""`).
+  - `company`,`work_summary`, `position`, `startDate` ("YYYY-MM" or "YYYY-01" if only year), `endDate` (same format; `null` if ongoing), `highlights` (see below), `location` (extract/search/infer as per general instructions, else `""`).
+  - `work_summary` section may or not be present in the resume, and it represents general responsibilities of the work. Only extract if present in the resume as a summary for that job; otherwise, leave as "".
 - `highlights`:
-  - Extract as-is if outcome-oriented; otherwise, rephrase to concise, action/result-oriented bullets (TAR). See few-shot examples below.
-  - For each set of highlights, in addition to extracting or rephrasing as described above, determine the overall extraction method used. Set `extraction_methods.work_highlights_extraction` to one of the defined values.
+  - Extract as-is if outcome-oriented; otherwise, rephrase to concise, action/result-oriented bullets (TAR).
+
 
 #### volunteer_experience
-- Only volunteer experiences. Same fields as work_experience.
+- Only volunteer experiences. Same fields as work_experience but without `work_summary`.
 
 #### education
 - Only formal education (degrees, diplomas, certifications from accredited institutions).
-- For each: `institution`, `location` (extract/infer as per general instructions, else `""`), `area`(field of study), `studyType` (see below, e.g., "Bachelor", "Master", "Diploma", etc.), `startDate`, `endDate`, `score` (GPA/% if available, else `""`).
+- For each: `institution`, `location` (extract/infer as per general instructions, else `""`), `area`(field of study), `studyType` (see below, e.g., "Bachelor", "Master", "Diploma", etc.), `startDate`, `endDate`, `score` (GPA/% if available, else `""`), `coursework` (extract as array if present, else return an emply array []).
 - For `studyType`, always use standardized, well-known degree names:
     - If the resume uses abbreviations (e.g., "BE", "B.E.", "BSc", "MSc", "PhD", "MBA"), convert them to the full standardized format:
         - "BE", "B.E.", "B.Tech", "BSc", "B.Sc" → "Bachelor"
@@ -156,6 +167,8 @@ Your job is to extract all relevant information from an anonymized resume, produ
         - "MBA" → "Master"
         - "Diploma", "PG Diploma" → "Diploma"
     - If you encounter an unknown abbreviation, infer the closest well-known type or leave as `""` and add a note in `extraction_methods.fallback_reason`.
+- `coursework`:
+  - Only extract if listed in the resume for the education entry; otherwise, leave as [].
 
 #### certificates
 - All professional certificates, licenses, non-degree credentials.
@@ -172,6 +185,15 @@ Your job is to extract all relevant information from an anonymized resume, produ
 - **location_source**: Indicates how work, education, or volunteering locations was determined: `"extracted"` (directly from resume), `"inferred"` (deduced from context), or `"web_searched"` (found via online search).
 - **has_missing_locations**: True if any work/education/volunteering location is missing after extraction/inference.
 - **fallback_reason**: If any required location could not be extracted/inferred, briefly state what is missing; else `""`.
+- **unmapped_resume_sections**: Array of objects, each representing information present in the resume but not mapped to the main output schema.  
+    - Each object must include:
+        - `category`: One of "Project", "Award", "Achievement", "Publication", or "Other"
+        - `source_section`: Section title as found in the resume (e.g., "Projects", "Honors", "Awards", "Professional Development")
+        - `title`: Name/title of the item (if available, else "")
+        - `description`: Brief details (if available, else "")
+        - `date`: Date (if available, else "")
+
+    - Only include sections or items not already represented in the extracted `resume_data`. If there are no unmapped sections, return an empty array.
 
 ---
 
@@ -185,35 +207,34 @@ Your job is to extract all relevant information from an anonymized resume, produ
     "email": "",
     "phone": "",
     "summary": "Experienced software developer with strong background in cloud platforms and data analysis.",
-    "address": "",
     "city": "",
     "region": ""
   },
   "skills": [
     {
-      "name": "Programming Languages",
+      "skill_group": "Programming Languages",
       "keywords": ["Python", "Java", "C#"]
     },
     {
-      "name": "Cloud Platforms",
+      "skill_group": "Cloud Platforms",
       "keywords": ["AWS", "Azure", "Google Cloud Platform"]
     },
     {
-      "name": "DevOps Tools",
+      "skill_group": "DevOps Tools",
       "keywords": ["Docker", "Kubernetes"]
     },
     {
-      "name": "Soft Skills",
+      "skill_group": "Soft Skills",
       "keywords": ["Communication", "Leadership"]
     }
   ],
   "work_experience": [
     {
       "company": "TCS",
-      "client": "",
       "position": "Software Engineer",
       "startDate": "2019-05",
       "endDate": "2023-04",
+      "work_summary": "Oversaw multiple cross-functional teams to deliver enterprise software projects on time and within budget, ensuring high client satisfaction and process improvement.",
       "highlights": [
         "Led migration of legacy systems to AWS, reducing downtime by 30%.",
         "Coordinated a team of 4 engineers to deliver project on time."
@@ -230,7 +251,8 @@ Your job is to extract all relevant information from an anonymized resume, produ
       "studyType": "Bachelor",
       "startDate": "2015-09",
       "endDate": "2019-06",
-      "score": "3.8/4.0"
+      "score": "3.8",
+      "coursework": [""]
     }
   ],
   "certificates": [
@@ -253,9 +275,25 @@ Your job is to extract all relevant information from an anonymized resume, produ
 }
 "extraction_methods": {
   "likely_home_country": "India",
-  "has_missing_location": false,
+  "has_missing_locations": false,
   "location_source": "extracted",
-  "fallback_reason": ""
+  "fallback_reason": "",
+  "unmapped_resume_sections": [
+    {
+      "category": "Project",
+      "source_section": ["Personal Projects"],
+      "title": "Smart Home Automation",
+      "description": "Designed and built a home automation system using Raspberry Pi and IoT sensors.",
+      "date": "2023-05"
+    },
+    {
+      "category": "Award",
+      "source_section": ["Honors", "Awards"],
+      "title": "Dean's List",
+      "description": "",
+      "date": "2022"
+    }
+  ]
 }
 ```
 
