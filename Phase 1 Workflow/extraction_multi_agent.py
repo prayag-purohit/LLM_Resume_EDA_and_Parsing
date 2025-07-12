@@ -175,7 +175,11 @@ if __name__ == "__main__":
 
             # Step 1: Convert .docx to PDF and archive original
             if filename.lower().endswith(".docx"):
-                file_path = convert_to_pdf(file_path, ARCHIVE_ROOT)
+                try:
+                    file_path = convert_to_pdf(file_path, ARCHIVE_ROOT)
+                except Exception as e:
+                    logger.error(f"Failed to convert {file_path} to PDF: {e}. Skipping file.")
+                    continue
             processed_filename = os.path.basename(file_path)
             resume_data_response = None
             key_metrics_response = None
@@ -195,20 +199,26 @@ if __name__ == "__main__":
                 gemini_resume_data.uploaded_resume_file = root_gemini.uploaded_resume_file
                 attempt = 0
                 while attempt < MAX_RETRIES:
-                    resume_data_response = gemini_resume_data.generate_content()
-                    parsed = None
                     try:
+                        resume_data_response = gemini_resume_data.generate_content()
                         from libs.mongodb import _clean_raw_llm_response
                         parsed = _clean_raw_llm_response(resume_data_response.text, processed_filename)
+                        should_retry = False
+                        if not resume_data_response or not hasattr(resume_data_response, 'text') or not resume_data_response.text:
+                            should_retry = True
+                        elif parsed and "error" in parsed:
+                            should_retry = True
+                        if should_retry:
+                            logger.warning(f"Error or empty response detected, retrying (attempt {attempt+1}) for {processed_filename}... Error: {parsed.get('error') if parsed else 'No response'}")
+                            attempt += 1
+                            resume_data_retries = attempt
+                            continue
+                        break
                     except Exception as e:
-                        logger.error(f"Error parsing resume_data_response: {e}")
-                    # Retry if invalid JSON is detected
-                    if parsed and "error" in parsed and "Invalid JSON format" in parsed["error"]:
-                        logger.warning(f"Invalid JSON detected in resume_data_response, retrying (attempt {attempt+1}) for {processed_filename}...")
+                        logger.warning(f"Exception during resume data extraction (attempt {attempt+1}) for {processed_filename}: {e}")
                         attempt += 1
                         resume_data_retries = attempt
                         continue
-                    break
                 if resume_data_retries > 0:
                     logger.info(f"First pass for {processed_filename} required {resume_data_retries} retry(ies).")
             except Exception as e: 
@@ -222,20 +232,26 @@ if __name__ == "__main__":
                 gemini_key_metrics.uploaded_resume_file = root_gemini.uploaded_resume_file
                 attempt = 0
                 while attempt < MAX_RETRIES:
-                    key_metrics_response = gemini_key_metrics.generate_content(prompt = key_metrics_prompt)
-                    parsed = None
                     try:
+                        key_metrics_response = gemini_key_metrics.generate_content(prompt = key_metrics_prompt)
                         from libs.mongodb import _clean_raw_llm_response
                         parsed = _clean_raw_llm_response(key_metrics_response.text, processed_filename)
+                        should_retry = False
+                        if not key_metrics_response or not hasattr(key_metrics_response, 'text') or not key_metrics_response.text:
+                            should_retry = True
+                        elif parsed and "error" in parsed:
+                            should_retry = True
+                        if should_retry:
+                            logger.warning(f"Error or empty response detected, retrying (attempt {attempt+1}) for {processed_filename}... Error: {parsed.get('error') if parsed else 'No response'}")
+                            attempt += 1
+                            key_metrics_retries = attempt
+                            continue
+                        break
                     except Exception as e:
-                        logger.error(f"Error parsing key_metrics_response: {e}")
-                    # Retry if invalid JSON is detected
-                    if parsed and "error" in parsed and "Invalid JSON format" in parsed["error"]:
-                        logger.warning(f"Invalid JSON detected in key_metrics_response, retrying (attempt {attempt+1}) for {processed_filename}...")
+                        logger.warning(f"Exception during key metrics extraction (attempt {attempt+1}) for {processed_filename}: {e}")
                         attempt += 1
                         key_metrics_retries = attempt
                         continue
-                    break
                 if key_metrics_retries > 0:
                     logger.info(f"Second pass (key metrics) for {processed_filename} required {key_metrics_retries} retry(ies).")
                 gemini_key_metrics.save_generated_content(response=key_metrics_response, output_dir=TEXT_OUTPUT_DIR)
@@ -247,14 +263,11 @@ if __name__ == "__main__":
             validation_response = None
             validation_score = None
             try:
-                # Load main validation prompt
                 validation_prompt = gemini_validation.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_validation.md')
-                # Load reference prompts as context
                 with open('Phase 1 Workflow/Prompts/prompt_std_resume_data.md', 'r', encoding='utf-8') as f:
                     resume_data_reference = f.read()
                 with open('Phase 1 Workflow/Prompts/prompt_std_key_metrics.md', 'r', encoding='utf-8') as f:
                     key_metrics_reference = f.read()
-                # Compose the full prompt with references clearly marked
                 full_validation_prompt = (
                     validation_prompt +
                     "\n\n---\nREFERENCE: Resume Data Extraction Schema and Instructions (DO NOT FOLLOW FOR OUTPUT FORMAT)\n" +
@@ -267,21 +280,27 @@ if __name__ == "__main__":
                 gemini_validation.uploaded_resume_file = root_gemini.uploaded_resume_file
                 attempt = 0
                 while attempt < MAX_RETRIES:
-                    validation_response = gemini_validation.generate_content(prompt=full_validation_prompt)
-                    parsed = None
                     try:
+                        validation_response = gemini_validation.generate_content(prompt=full_validation_prompt)
                         from libs.mongodb import _clean_raw_llm_response
                         parsed = _clean_raw_llm_response(validation_response.text, processed_filename)
                         validation_score = parsed.get("validation_score")
+                        should_retry = False
+                        if not validation_response or not hasattr(validation_response, 'text') or not validation_response.text:
+                            should_retry = True
+                        elif parsed and "error" in parsed:
+                            should_retry = True
+                        if should_retry:
+                            logger.warning(f"Error or empty response detected, retrying (attempt {attempt+1}) for {processed_filename}... Error: {parsed.get('error') if parsed else 'No response'}")
+                            attempt += 1
+                            validation_retries = attempt
+                            continue
+                        break
                     except Exception as e:
-                        logger.error(f"Error parsing validation_response: {e}")
-                    # Retry if invalid JSON is detected
-                    if parsed and "error" in parsed and "Invalid JSON format" in parsed["error"]:
-                        logger.warning(f"Invalid JSON detected in validation_response, retrying (attempt {attempt+1}) for {processed_filename}...")
+                        logger.warning(f"Exception during validation (attempt {attempt+1}) for {processed_filename}: {e}")
                         attempt += 1
                         validation_retries = attempt
                         continue
-                    break
                 if validation_retries > 0:
                     logger.info(f"Third pass (validation agent) for {processed_filename} required {validation_retries} retry(ies).")
                 gemini_validation.save_generated_content(response=validation_response, output_dir=TEXT_OUTPUT_DIR)
@@ -305,25 +324,30 @@ if __name__ == "__main__":
                     rerun_count += 1
                     logger.info(f"Re-running extraction, key metrics, and validation for {processed_filename} due to low validation score (attempt {rerun_count}).")
                     try:
-                        # --- Extraction Agent with Retry ---
+                        # --- Extraction Agent with Retry (robust logic) ---
                         gemini_resume_data.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_resume_data.md')
                         gemini_resume_data.uploaded_resume_file = root_gemini.uploaded_resume_file
                         extraction_attempt = 0
                         resume_data_response = None
                         while extraction_attempt < MAX_RETRIES:
-                            resume_data_response = gemini_resume_data.generate_content()
-                            parsed_extraction = None
                             try:
+                                resume_data_response = gemini_resume_data.generate_content()
                                 from libs.mongodb import _clean_raw_llm_response
                                 parsed_extraction = _clean_raw_llm_response(resume_data_response.text, processed_filename)
+                                should_retry = False
+                                if not resume_data_response or not hasattr(resume_data_response, 'text') or not resume_data_response.text:
+                                    should_retry = True
+                                elif parsed_extraction and "error" in parsed_extraction:
+                                    should_retry = True
+                                if should_retry:
+                                    logger.warning(f"Extraction re-run: Error or empty response, retrying (attempt {extraction_attempt+1}) for {processed_filename}... Error: {parsed_extraction.get('error') if parsed_extraction else 'No response'}")
+                                    extraction_attempt += 1
+                                    continue
+                                break
                             except Exception as e:
-                                logger.error(f"Error parsing resume_data_response (re-run): {e}")
-                            # Retry if invalid JSON or empty/missing response
-                            if (parsed_extraction and "error" in parsed_extraction and "Invalid JSON format" in parsed_extraction["error"]) or not resume_data_response or not hasattr(resume_data_response, 'text') or getattr(resume_data_response, 'text', None) in (None, ""):
-                                logger.warning(f"Extraction re-run: Invalid/empty response, retrying (attempt {extraction_attempt+1}) for {processed_filename}...")
+                                logger.warning(f"Exception during extraction re-run (attempt {extraction_attempt+1}) for {processed_filename}: {e}")
                                 extraction_attempt += 1
                                 continue
-                            break
                         if extraction_attempt > 0:
                             logger.info(f"Extraction re-run for {processed_filename} required {extraction_attempt} retry(ies).")
                         if not resume_data_response or not hasattr(resume_data_response, 'text') or getattr(resume_data_response, 'text', None) in (None, ""):
@@ -331,25 +355,31 @@ if __name__ == "__main__":
                             continue
                         logger.info(f"Extraction re-run complete for {processed_filename}.");
 
-                        # --- Key Metrics Agent with Retry ---
+                        # --- Key Metrics Agent with Retry (robust logic) ---
                         key_metrics_prompt = gemini_key_metrics.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_key_metrics.md')
                         key_metrics_prompt = key_metrics_prompt + "\nThe LLM Response:" + resume_data_response.text
                         gemini_key_metrics.uploaded_resume_file = root_gemini.uploaded_resume_file
                         key_metrics_attempt = 0
                         key_metrics_response = None
                         while key_metrics_attempt < MAX_RETRIES:
-                            key_metrics_response = gemini_key_metrics.generate_content(prompt=key_metrics_prompt)
-                            parsed_key_metrics = None
                             try:
+                                key_metrics_response = gemini_key_metrics.generate_content(prompt=key_metrics_prompt)
                                 from libs.mongodb import _clean_raw_llm_response
                                 parsed_key_metrics = _clean_raw_llm_response(key_metrics_response.text, processed_filename)
+                                should_retry = False
+                                if not key_metrics_response or not hasattr(key_metrics_response, 'text') or not key_metrics_response.text:
+                                    should_retry = True
+                                elif parsed_key_metrics and "error" in parsed_key_metrics:
+                                    should_retry = True
+                                if should_retry:
+                                    logger.warning(f"Key metrics re-run: Error or empty response, retrying (attempt {key_metrics_attempt+1}) for {processed_filename}... Error: {parsed_key_metrics.get('error') if parsed_key_metrics else 'No response'}")
+                                    key_metrics_attempt += 1
+                                    continue
+                                break
                             except Exception as e:
-                                logger.error(f"Error parsing key_metrics_response (re-run): {e}")
-                            if (parsed_key_metrics and "error" in parsed_key_metrics and "Invalid JSON format" in parsed_key_metrics["error"]) or not key_metrics_response or not hasattr(key_metrics_response, 'text') or getattr(key_metrics_response, 'text', None) in (None, ""):
-                                logger.warning(f"Key metrics re-run: Invalid/empty response, retrying (attempt {key_metrics_attempt+1}) for {processed_filename}...")
+                                logger.warning(f"Exception during key metrics re-run (attempt {key_metrics_attempt+1}) for {processed_filename}: {e}")
                                 key_metrics_attempt += 1
                                 continue
-                            break
                         if key_metrics_attempt > 0:
                             logger.info(f"Key metrics re-run for {processed_filename} required {key_metrics_attempt} retry(ies).")
                         if not key_metrics_response or not hasattr(key_metrics_response, 'text') or getattr(key_metrics_response, 'text', None) in (None, ""):
@@ -357,8 +387,7 @@ if __name__ == "__main__":
                             continue
                         logger.info(f"Key metrics re-run complete for {processed_filename}.");
 
-                        # --- Validation Agent with Retry ---
-                        # Reload reference prompts for each re-run
+                        # --- Validation Agent with Retry (robust logic) ---
                         validation_prompt = gemini_validation.load_prompt_template('Phase 1 Workflow/Prompts/prompt_std_validation.md')
                         with open('Phase 1 Workflow/Prompts/prompt_std_resume_data.md', 'r', encoding='utf-8') as f:
                             resume_data_reference = f.read()
@@ -377,20 +406,26 @@ if __name__ == "__main__":
                         validation_attempt = 0
                         validation_response = None
                         while validation_attempt < MAX_RETRIES:
-                            validation_response = gemini_validation.generate_content(prompt=full_validation_prompt)
-                            parsed_validation = None
                             try:
+                                validation_response = gemini_validation.generate_content(prompt=full_validation_prompt)
                                 from libs.mongodb import _clean_raw_llm_response
                                 parsed_validation = _clean_raw_llm_response(validation_response.text, processed_filename)
                                 validation_score = parsed_validation.get("validation_score")
                                 validation_flags = parsed_validation.get("validation_flags")
+                                should_retry = False
+                                if not validation_response or not hasattr(validation_response, 'text') or not validation_response.text:
+                                    should_retry = True
+                                elif parsed_validation and "error" in parsed_validation:
+                                    should_retry = True
+                                if should_retry:
+                                    logger.warning(f"Validation re-run: Error or empty response, retrying (attempt {validation_attempt+1}) for {processed_filename}... Error: {parsed_validation.get('error') if parsed_validation else 'No response'}")
+                                    validation_attempt += 1
+                                    continue
+                                break
                             except Exception as e:
-                                logger.error(f"Error parsing validation_response (re-run): {e}")
-                            if (parsed_validation and "error" in parsed_validation and "Invalid JSON format" in parsed_validation["error"]) or not validation_response or not hasattr(validation_response, 'text') or getattr(validation_response, 'text', None) in (None, ""):
-                                logger.warning(f"Validation re-run: Invalid/empty response, retrying (attempt {validation_attempt+1}) for {processed_filename}...")
+                                logger.warning(f"Exception during validation re-run (attempt {validation_attempt+1}) for {processed_filename}: {e}")
                                 validation_attempt += 1
                                 continue
-                            break
                         if validation_attempt > 0:
                             logger.info(f"Validation re-run for {processed_filename} required {validation_attempt} retry(ies).")
                         if not validation_response or not hasattr(validation_response, 'text') or getattr(validation_response, 'text', None) in (None, ""):
