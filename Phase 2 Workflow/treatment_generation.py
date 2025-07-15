@@ -20,7 +20,8 @@
 # TODO:
 # [ ] Add another agent that can create 4 company name lists for each resume to reduce the risk of experiment detection or flags by ATS systems. This can introduce confounding variables, caution
 
-
+# [ ] Functionality to do a single file 
+# [ ] Failed Collection for low similarity scores for QA. 
 # [*] Implement retry logic for low similarity scores.
 # [*] Add logging, and error handling.
 # [*] Add a failed files array to track files that failed to process.
@@ -89,6 +90,7 @@ cwe_treatment_df = cwe_treatment_df[cwe_treatment_df['sector'] == SECTOR].reset_
 SIMILARITY_MODEL = SentenceTransformer(
     r'Phase 2 Workflow\models\all-MiniLM-L6-v2'
 )
+FOCUSED_SIMILARITY_THRESHOLD = 0.60
 
 def extract_rephrased_text(resume_data):
     text_parts = []
@@ -251,7 +253,8 @@ target_collection = MONGO_CLIENT[DB_NAME][TARGET_COLLECTION_NAME]
 
 # main processing loop
 error_files = []
-for file in sector_files[0:1]:
+failed_similarity_files = [] ##### FOR DEBUGGING AND QA 
+for file in sector_files[0:5]:
     try:
         # Building the final document structure, initializing empty doc with metadata
         logger.info(f"Processing file: {file}")
@@ -326,15 +329,20 @@ for file in sector_files[0:1]:
                 )
                 try:
                     focused_similarity_score = float(focused_similarity_score)
+                    ########## FOR DEBUGGING AND SIMILARITY TEST
+                    if focused_similarity_score < 0.8:
+                        print(f'failed the similarity test at similarity score of: {focused_similarity_score}')
+                        failed_similarity_files.append(file)
+
                 except Exception as e:
                     logger.error(f"Could not convert similarity score to float: {focused_similarity_score} ({e})")
                     focused_similarity_score = 0.0
-                if focused_similarity_score >= 0.80:
+                if focused_similarity_score >= FOCUSED_SIMILARITY_THRESHOLD:
                     break
                 else:
                     logger.warning(f"Low similarity score ({focused_similarity_score}) for treatment {key} with style guide: {value['style_guide']} in file {file} (attempt {retry_count+1}). Retrying...")
                     retry_count += 1
-            if focused_similarity_score < 0.80:
+            if focused_similarity_score < FOCUSED_SIMILARITY_THRESHOLD:
                 logger.error(f"Failed to achieve desired similarity score for treatment {key} in file {file} after {MAX_RETRIES} attempts.")
                 error_files.append(file)
                 break
@@ -379,6 +387,9 @@ if error_files:
     logger.warning(f"List of failed files: {error_files}")
 else:
     logger.info("All files processed successfully.")
+
+if failed_similarity_files: ###### FOR DEBUGGING AND QA
+    logger.warning(f"Files that failed similarity scores but inserted to mongoDB anyways: {failed_similarity_files}")
 
 
 
