@@ -8,3 +8,5 @@ Processed_resumes/*
 Jupyternotebooks/*
 Exported_resumes/*
 data/*
+pdf_converter.py/*
+just pdf/*
