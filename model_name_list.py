@@ -14,11 +14,6 @@ for m in client.models.list():
         if action == "generateContent":
             print(m.name)
 
-print("List of models that support embedContent:\n")
-for m in client.models.list():
-    for action in m.supported_actions:
-        if action == "embedContent":
-            print(m.name)
 
 if __name__ ==  "__main__":
     response = client.models.generate_content(

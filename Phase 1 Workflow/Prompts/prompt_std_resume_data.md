@@ -296,4 +296,3 @@ Your job is to extract all relevant information from an anonymized resume, produ
   ]
 }
 ```
-

@@ -10,6 +10,7 @@ Workflow Overview
 2. **Conversion**: Converts `.docx` resumes to PDF and archives the originals.
 3. **Upload**: Uploads each resume to the root Gemini agent.
 4. **First Pass (Resume Data Extraction)**: Uses a Gemini agent to extract structured data from the resume using a prompt template.
+
 5. **Second Pass (Key Metrics Analysis)**: Runs key metrics analysis on the extracted data using another Gemini agent and a separate prompt template.
 6. **Third Pass (Validation)**: Validates the extracted and analyzed data using a validation agent.
 7. **Saving Results**: Saves all LLM responses to MongoDB. If saving fails, raw responses are logged for debugging.
@@ -27,6 +28,7 @@ Workflow Overview
 
 Key Components
 --------------
+
 - **GeminiProcessor**: Handles LLM interactions for each task (extraction, key metrics, validation).
 - **MongoDB Integration**: Saves structured responses for further analysis.
 - **Logging**: Tracks progress and errors for each file, including retry and re-run attempts.
@@ -307,7 +309,9 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"Failed in third pass (validation agent), file: {filename}, ERROR: {e}")
 
+
             # If validation_score is present and less than 7, re-run the extraction/key_metrics/validation loop (up to 2 times)
+
             rerun_count = 0
             MAX_RERUNS = 2
             while validation_score is not None:
@@ -322,6 +326,7 @@ if __name__ == "__main__":
                         validation_flags = parsed.get("validation_flags")
                     logger.warning(f"Validation score {score_val} < 7 for {processed_filename}. Validation flags: {validation_flags}")
                     rerun_count += 1
+
                     logger.info(f"Re-running extraction, key metrics, and validation for {processed_filename} due to low validation score (attempt {rerun_count}).")
                     try:
                         # --- Extraction Agent with Retry (robust logic) ---
