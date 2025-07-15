@@ -10,3 +10,5 @@ Exported_resumes/*
 */data/*
 models
 *.txt
+pdf_converter.py/*
+just pdf/*
