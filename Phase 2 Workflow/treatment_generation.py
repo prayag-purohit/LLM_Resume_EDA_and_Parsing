@@ -18,10 +18,12 @@
 # 5. Save the 4 generated documents as separate entries in the 'Treated_resumes' collection as seperate documents with the same metadata.
 
 # TODO:
-# [ ] Implement retry logic for low similarity scores.
-# [ ] Add logging, and error handling.
-# [ ] Add a failed files array to track files that failed to process.
 # [ ] Add another agent that can create 4 company name lists for each resume to reduce the risk of experiment detection or flags by ATS systems. This can introduce confounding variables, caution
+
+
+# [*] Implement retry logic for low similarity scores.
+# [*] Add logging, and error handling.
+# [*] Add a failed files array to track files that failed to process.
 # [*] Since the model does not get data for previous treatments, we have to ensure that all treatments are rephrased slightly differently.
 #     [*] This can be done by adding a random seed to the rephrasing prompt (can we)
 #     [O] (Too complex) Alternatively, we can add a langchain mechanism that gives all previous treatments to the model as context.
@@ -42,11 +44,16 @@ import random
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
+import argparse
 
 logger = get_logger(__name__)
 
 # Sector we are processing
-SECTOR = "ITC"
+parser = argparse.ArgumentParser(description="Generate treated resumes for a correspondence study.")
+parser.add_argument("--sector", type=str, required=True, help="Industry prefix as in the mongoDB (all caps)")
+args = parser.parse_args()
+
+SECTOR = str.upper(args.sector).strip()
 
 # MongoDB configuration
 MONGO_CLIENT = _get_mongo_client()
@@ -56,7 +63,7 @@ TARGET_COLLECTION_NAME = "Treated_resumes"
 
 # Gemini model configuration
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
-GEMINI_TEMPERATURE = 0.7
+GEMINI_TEMPERATURE = 0.6
 ENABLE_GOOGLE_SEARCH = False
 PROMPT_TEMPLATE_PATH = "Phase 2 Workflow/Prompts/prompt_treatment_generation.md"
 MAX_RETRIES = 2
@@ -85,26 +92,32 @@ SIMILARITY_MODEL = SentenceTransformer(
 
 def extract_rephrased_text(resume_data):
     text_parts = []
-    if 'basics' in resume_data and 'summary' in resume_data['basics']:
-        text_parts.append(resume_data['basics']['summary'])
-    if 'work_experience' in resume_data:
-        for job in resume_data['work_experience']:
-            if 'highlights' in job and isinstance(job['highlights'], list):
-                text_parts.append(" ".join(job['highlights']))
-    return " ".join(text_parts)
+    try:
+        if 'basics' in resume_data and 'summary' in resume_data['basics']:
+            text_parts.append(resume_data['basics']['summary'])
+        if 'work_experience' in resume_data:
+            for job in resume_data['work_experience']:
+                if 'highlights' in job and isinstance(job['highlights'], list):
+                    text_parts.append(" ".join(job['highlights']))
+        return " ".join(text_parts)
+    except Exception as e:
+        logger.error(f"Error extracting rephrased text from resume_data: {e}")
+        return ""
 
 def calculate_focused_similarity(control_resume_data, treated_resume_data):
-    control_text = extract_rephrased_text(control_resume_data)
-    treated_text = extract_rephrased_text(treated_resume_data)
-    
-    if not control_text or not treated_text:
-        return 0.0
-
-    control_embedding = SIMILARITY_MODEL.encode(control_text)
-    treated_embedding = SIMILARITY_MODEL.encode(treated_text)
-    
-    score = cosine_similarity([control_embedding], [treated_embedding])[0][0]
-    return score
+    try:
+        control_text = extract_rephrased_text(control_resume_data)
+        treated_text = extract_rephrased_text(treated_resume_data)
+        if not control_text or not treated_text:
+            return 0.0
+        control_embedding = SIMILARITY_MODEL.encode(control_text)
+        treated_embedding = SIMILARITY_MODEL.encode(treated_text)
+        score = cosine_similarity([control_embedding], [treated_embedding])[0][0]
+        return score
+    except Exception as e:
+        import traceback
+        logger.error(f"Error while calculating the focused similarity score: {e}\n{traceback.format_exc()}")
+        return 'error'
 
 def select_and_prepare_treatments(
     cec_treatment_df: pd.DataFrame,
@@ -235,82 +248,97 @@ treatment_model = GeminiProcessor(
 treatment_prompt = treatment_model.load_prompt_template(prompt_file_path=PROMPT_TEMPLATE_PATH)
 
 target_collection = MONGO_CLIENT[DB_NAME][TARGET_COLLECTION_NAME]
+
 # main processing loop
+error_files = []
 for file in sector_files[0:1]:
-    # Building the final document structure, initializing empty doc with metadata
-    logger.info(f"Processing file: {file}")
-    file_data = get_document_by_fileid(
-        db_name=DB_NAME,
-        collection_name=SOURCE_COLLECTION_NAME,
-        file_id=file,
-        mongo_client=MONGO_CLIENT
-    )
-    # Filter the resume data for the current file
-    source_resume_data = file_data.get('resume_data', {})
-    if not source_resume_data:
-        logger.error(f"No resume data found for file {file}. Skipping.")
-        sys.exit(1)
-
-    documents_to_save = []
-    common_metadata = {
-        'original_file_id': file,
-        'industry_prefix': file_data.get('industry_prefix'),
-        'file_size_bytes': file_data.get('file_size_bytes'),
-        'source_file_hash': file_data.get('file_hash'),
-    }
-
-    control_resume_target_collection = {
-            **common_metadata, # Add the common data
-            "document_id": f"{file}_control",
-            "treatment_type": "control",
-            "generation_timestamp": datetime.datetime.now(),
-            "validation": {
-                "focused_similarity_score": "",
-                "passed_threshold": "N/A"
-            },
-            "treatment_applied": "N/A",
-            "resume_data": source_resume_data['resume_data'] 
-    }
-    documents_to_save.append(control_resume_target_collection)
-
-    # Get two random treatments for Canadian Education and Canadian Work Experience
-    treatment_prompts = select_and_prepare_treatments(
-        cec_treatment_df,
-        cwe_treatment_df,
-        source_resume_data,
-        treatment_prompt,
-        STYLE_MODIFIERS
-    )
-    if not treatment_prompts:
-        logger.error(f"No treatments available for file {file}. Skipping.")
-        sys.exit(1)
-
-    for key, value in treatment_prompts.items():
-        temp_treatment_dict = {}
-        logger.info(f"Generating treatment {key} for file {file}.")
-        # Generate the treated resume using GeminiProcessor
-        response = treatment_model.generate_content(
-            prompt=value['prompt'],
+    try:
+        # Building the final document structure, initializing empty doc with metadata
+        logger.info(f"Processing file: {file}")
+        file_data = get_document_by_fileid(
+            db_name=DB_NAME,
+            collection_name=SOURCE_COLLECTION_NAME,
+            file_id=file,
+            mongo_client=MONGO_CLIENT
         )
-        
-        if not response or not response.text:
-            logger.error(f"Failed to generate content for treatment {key} in file {file}.")
+        # Filter the resume data for the current file
+        source_resume_data = file_data.get('resume_data', {})
+        if not source_resume_data:
+            logger.error(f"No resume data found for file {file}. Skipping.")
+            error_files.append(file)
             continue
-        
-        # Clean the raw response
-        treated_resume_data = _clean_raw_llm_response(response.text)
-        
-        # Validate the rephrasing with cosine similarity
-        focused_similarity_score = calculate_focused_similarity(
-            source_resume_data['resume_data'], treated_resume_data['resume_data']
+
+        documents_to_save = []
+        common_metadata = {
+            'original_file_id': file,
+            'industry_prefix': file_data.get('industry_prefix'),
+            'file_size_bytes': file_data.get('file_size_bytes'),
+            'source_file_hash': file_data.get('file_hash'),
+        }
+
+        control_resume_target_collection = {
+                **common_metadata, # Add the common data
+                "document_id": f"{file}_control",
+                "treatment_type": "control",
+                "generation_timestamp": datetime.datetime.now(),
+                "validation": {
+                    "focused_similarity_score": "",
+                    "passed_threshold": "N/A"
+                },
+                "treatment_applied": "N/A",
+                "resume_data": source_resume_data['resume_data'] 
+        }
+        documents_to_save.append(control_resume_target_collection)
+
+        # Get two random treatments for Canadian Education and Canadian Work Experience
+        treatment_prompts = select_and_prepare_treatments(
+            cec_treatment_df,
+            cwe_treatment_df,
+            source_resume_data,
+            treatment_prompt,
+            STYLE_MODIFIERS
         )
-        focused_similarity_score = float(focused_similarity_score)
-        
-        if focused_similarity_score < 0.85:
-            logger.warning(f"Low similarity score ({focused_similarity_score}) for treatment {key} in file {file}. Please add retry logic")
-            
-        
-        final_doc_for_this_version = {
+        if not treatment_prompts:
+            logger.error(f"No treatments available for file {file}. stopping flow")
+            sys.exit(1)
+    except Exception as e:
+        logger.error(f"Error in the control generation, or prompt generation for {file}: {e}")
+        error_files.append(file)
+    try:
+        for key, value in treatment_prompts.items():
+            logger.info(f"Generating treatment {key} for file {file}.")
+            retry_count = 0
+            focused_similarity_score = 0.0
+            treated_resume_data = None
+            while retry_count < MAX_RETRIES:
+                response = treatment_model.generate_content(
+                    prompt=value['prompt'],
+                )
+                if not response or not response.text:
+                    logger.error(f"Failed to generate content for treatment {key} in file {file} (attempt {retry_count+1}).")
+                    retry_count += 1
+                    continue
+                # Clean the raw response
+                treated_resume_data = _clean_raw_llm_response(response.text)
+                # Validate the rephrasing with cosine similarity
+                focused_similarity_score = calculate_focused_similarity(
+                    source_resume_data['resume_data'], treated_resume_data['resume_data']
+                )
+                try:
+                    focused_similarity_score = float(focused_similarity_score)
+                except Exception as e:
+                    logger.error(f"Could not convert similarity score to float: {focused_similarity_score} ({e})")
+                    focused_similarity_score = 0.0
+                if focused_similarity_score >= 0.80:
+                    break
+                else:
+                    logger.warning(f"Low similarity score ({focused_similarity_score}) for treatment {key} with style guide: {value['style_guide']} in file {file} (attempt {retry_count+1}). Retrying...")
+                    retry_count += 1
+            if focused_similarity_score < 0.80:
+                logger.error(f"Failed to achieve desired similarity score for treatment {key} in file {file} after {MAX_RETRIES} attempts.")
+                error_files.append(file)
+                break
+            final_doc_for_this_version = {
                 **common_metadata, # Add the common data
                 "document_id": f"{file.replace('.pdf', '')}_{key}",
                 "treatment_type": key,
@@ -323,15 +351,34 @@ for file in sector_files[0:1]:
                 "treatment_applied": value['treatment_applied'],
                 "resume_data": treated_resume_data 
             }
-        documents_to_save.append(final_doc_for_this_version)
-        logger.info(f"  -> Successfully prepared '{key}' for saving.")
-        
+            documents_to_save.append(final_doc_for_this_version)
+            logger.info(f"  -> Successfully prepared '{key}' for saving.")
+    except Exception as e:
+        import traceback
+        logger.error(f"Error in the inner loop for {file} {key}: {e}\n{traceback.format_exc()}")
+        error_files.append(file)
+
+    # If any error occurred for this file, skip saving
+    if file in error_files:
+        logger.warning(f"Skipping saving for file {file} due to errors.")
+        continue
+
     if documents_to_save:
-        target_collection.insert_many(documents_to_save)
-        logger.info(f"Successfully saved {len(documents_to_save)} treated resumes for file {file}.")
+        try:
+            target_collection.insert_many(documents_to_save)
+            logger.info(f"Successfully saved {len(documents_to_save)} treated resumes for file {file}.")
+        except Exception as e:
+            import traceback
+            logger.error(f"Error saving documents for file {file}: {e}\n{traceback.format_exc()}")
+            error_files.append(file)
     else:
         logger.error(f"No documents to save for file {file}. Skipping saving step.")
-        sys.exit(1)
+        error_files.append(file)
+
+if error_files:
+    logger.warning(f"List of failed files: {error_files}")
+else:
+    logger.info("All files processed successfully.")
 
 
 
