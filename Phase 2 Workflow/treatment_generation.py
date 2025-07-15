@@ -164,9 +164,11 @@ def select_and_prepare_treatments(
     cec_treatment_idx = random.randint(0, 1)  # Randomly select one of the two CEC treatments
     cec_treatment = cec_treatments[cec_treatment_idx]  # Randomly select one of the two CEC treatments
     type_i_prompt = base_prompt.replace("{Treatment_object}", str(cec_treatment))
-    type_i_prompt = type_i_prompt.replace("{style_guide}", shuffled_styles.pop())
+    type_i_style_guide = shuffled_styles.pop()
+    type_i_prompt = type_i_prompt.replace("{style_guide}", type_i_style_guide)
     treatment_prompts["Type_I"] = {
         "prompt": type_i_prompt,
+        "style_guide": type_i_style_guide,
         "treatment_applied": {"Canadian_Education": cec_treatment}
     }
     cec_treatment_idx = 1 - cec_treatment_idx  # Get the other CEC treatment for Type III
@@ -175,9 +177,11 @@ def select_and_prepare_treatments(
     cwe_treatment_idx = random.randint(0, 1)
     cwe_treatment = cwe_treatments[cwe_treatment_idx]
     type_ii_prompt = base_prompt.replace("{Treatment_object}", str(cwe_treatment))
-    type_ii_prompt = type_ii_prompt.replace("{style_guide}", shuffled_styles.pop())
+    type_ii_style_guide = shuffled_styles.pop()
+    type_ii_prompt = type_ii_prompt.replace("{style_guide}", type_ii_style_guide)
     treatment_prompts["Type_II"] = {
         "prompt": type_ii_prompt,
+        "style_guide": type_ii_style_guide,
         "treatment_applied": {"Canadian_Work_Experience": cwe_treatment}
     }
     cwe_treatment_idx = 1 - cwe_treatment_idx  # Get the other CWE treatment for Type III
@@ -192,12 +196,14 @@ def select_and_prepare_treatments(
         }
     }
     type_iii_prompt = base_prompt.replace("{Treatment_object}", str(mixed_treatment_payload))
-    type_iii_prompt = type_iii_prompt.replace("{style_guide}", shuffled_styles.pop())
+    type_iii_style_guide = shuffled_styles.pop()
+    type_iii_prompt = type_iii_prompt.replace("{style_guide}", type_iii_style_guide)
     treatment_prompts["Type_III"] = {
         "prompt": type_iii_prompt,
+        "style_guide": type_iii_style_guide,
         "treatment_applied": {
-            "Canadian_Education": cec_treatments[1],
-            "Canadian_Work_Experience": cwe_treatments[1]
+            "Canadian_Education": cec_treatments[cec_treatment_idx],
+            "Canadian_Work_Experience": cwe_treatments[cwe_treatment_idx]
         }
     }
 
@@ -313,8 +319,9 @@ for file in sector_files[0:1]:
                     "focused_similarity_score": focused_similarity_score,
                     "passed_threshold": True 
                 },
+                "style_guide": value['style_guide'],
                 "treatment_applied": value['treatment_applied'],
-                "resume_data": treated_resume_data # The most important part: the new resume
+                "resume_data": treated_resume_data 
             }
         documents_to_save.append(final_doc_for_this_version)
         logger.info(f"  -> Successfully prepared '{key}' for saving.")
