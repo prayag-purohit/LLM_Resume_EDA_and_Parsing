@@ -20,8 +20,9 @@
 # TODO:
 # [ ] Add another agent that can create 4 company name lists for each resume to reduce the risk of experiment detection or flags by ATS systems. This can introduce confounding variables, caution
 
-# [ ] Functionality to do a single file 
-# [ ] Failed Collection for low similarity scores for QA. 
+# [ ] Do some QA on Focused similarity score to see whether it is helpful or not. 
+        # [ ] Remove Debugging things after QA
+# [*] Functionality to do a single file 
 # [*] Implement retry logic for low similarity scores.
 # [*] Add logging, and error handling.
 # [*] Add a failed files array to track files that failed to process.
@@ -33,6 +34,7 @@
 
 
 import sys
+import os
 sys.path.append('..')
 sys.path.append('../libs')
 
@@ -48,10 +50,12 @@ from sentence_transformers import SentenceTransformer
 import argparse
 
 logger = get_logger(__name__)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Sector we are processing
 parser = argparse.ArgumentParser(description="Generate treated resumes for a correspondence study.")
 parser.add_argument("--sector", type=str, required=True, help="Industry prefix as in the mongoDB (all caps)")
+parser.add_argument("--files", type=str, nargs='+', help="Optional: A list of specific file IDs to process (e.g., ITC-01.pdf ITC-02.pdf).")
 args = parser.parse_args()
 
 SECTOR = str.upper(args.sector).strip()
@@ -66,7 +70,7 @@ TARGET_COLLECTION_NAME = "Treated_resumes"
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
 GEMINI_TEMPERATURE = 0.6
 ENABLE_GOOGLE_SEARCH = False
-PROMPT_TEMPLATE_PATH = "Phase 2 Workflow/Prompts/prompt_treatment_generation.md"
+PROMPT_TEMPLATE_PATH = os.path.join(SCRIPT_DIR, "Prompts", "prompt_treatment_generation.md")
 MAX_RETRIES = 2
 STYLE_MODIFIERS = [
     "using strong, action-oriented verbs and focusing on quantifiable outcomes",
@@ -78,8 +82,9 @@ STYLE_MODIFIERS = [
 ]
 
 # Treatment file paths
-TREATMENT_CEC_FILE = "Phase 2 Workflow/Education_treatment_dummy.xlsx"
-TREATMENT_CWE_FILE = "Phase 2 Workflow/WE_treatment_dummy.xlsx"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TREATMENT_CEC_FILE = os.path.join(SCRIPT_DIR, "Education_treatment_dummy.xlsx")
+TREATMENT_CWE_FILE = os.path.join(SCRIPT_DIR, "WE_treatment_dummy.xlsx")
 # Load treatment data from Excel files in pandas DataFrames
 cec_treatment_df = pd.read_excel(TREATMENT_CEC_FILE)
 cec_treatment_df = cec_treatment_df[cec_treatment_df['sector'] == SECTOR].reset_index(drop=True)
@@ -88,7 +93,7 @@ cwe_treatment_df = cwe_treatment_df[cwe_treatment_df['sector'] == SECTOR].reset_
 
 # Load the model once to be reused in the loop for cosine similarity calculations
 SIMILARITY_MODEL = SentenceTransformer(
-    r'Phase 2 Workflow\models\all-MiniLM-L6-v2'
+    os.path.join(SCRIPT_DIR, "models", "all-MiniLM-L6-v2")
 )
 FOCUSED_SIMILARITY_THRESHOLD = 0.60
 
@@ -229,13 +234,22 @@ def select_and_prepare_treatments(
 #=============================================================================================================================================================================
 
 # 1. Import all files from the source collection for the specified sector
-all_files = get_all_file_ids(
-    db_name=DB_NAME,
-    collection_name=SOURCE_COLLECTION_NAME,
-    mongo_client=MONGO_CLIENT
-)
+if args.files:
+    # If specific files are provided via the command line, use that list
+    valid_files = get_all_file_ids(db_name=DB_NAME, collection_name=SOURCE_COLLECTION_NAME, mongo_client=MONGO_CLIENT)
+    sector_files = [f for f in args.files if f in valid_files]
+    logger.info(f"Processing {len(sector_files)} specific files provided via command line.")
+else:
+    # Otherwise, fall back to the original behavior: get all files for the sector
+    logger.info(f"No specific files provided. Fetching all files for sector: {SECTOR}.")
+    all_files = get_all_file_ids(
+        db_name=DB_NAME,
+        collection_name=SOURCE_COLLECTION_NAME,
+        mongo_client=MONGO_CLIENT
+    )
+    sector_files = [f for f in all_files if SECTOR in f]
 
-sector_files = [f for f in all_files if SECTOR in f]
+
 if not sector_files:
     logger.error(f"No files found for sector {SECTOR}. Exiting.")
     sys.exit(1)
