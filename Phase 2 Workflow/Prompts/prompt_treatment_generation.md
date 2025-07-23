@@ -11,9 +11,14 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
 
 1.  **Analyze:** Carefully read the entire Base Resume to understand its structure, tone, and the candidate's professional profile.
 
-2.  **Integrate Treatment:** Add the new information from the Treatment Instructions into the resume.
+2.  **Integrate Treatment, and Company names:** Add the new information from the Treatment Instructions into the resume. Also replace the company names with the given list
+  * Treatments: Add the new information from the Treatment Instructions into the resume.
     * If adding education, place it at the top of the `education` array. Not under the `certifications` array.
     * If adding experience, place it at the top of the `work_experience` array.
+  * Company names: Replace the company names in the work_experience array based on the treatment_type:
+    * If treatment_type is "Type_I", use the first company from similar_companies (index 0).
+    * If treatment_type is "Type_II", use the second company from similar_companies (index 1).
+    * If treatment_type is "Type_III", use the third company from similar_companies (index 2).
 
 3.  **Refine for Anonymity:** To prevent the resume from being an exact duplicate of the control, you will subtly rephrase some descriptive text. Follow these rules precisely:
     * **DO:** Rephrase the `summary` in the `basics` section and the `highlights` (bullet points) within the `work_experience` section.
@@ -27,13 +32,19 @@ Based on the provided Base Resume JSON and Treatment Instructions, perform the f
 
 
 ## INPUTS
+0. Treatment Type
+{treatment_type}
+
 1. Original JSON resume object: 
 {JSON_resume_object}
 
 2. The treatment(s) that you're supposed to add to the resume:
 {Treatment_object}
 
-3. The style of rephrasing:
+3. The List of company names you can use:
+{company_names_list}
+
+4. The style of rephrasing:
 {style_guide}
 
 ## Output Schema
