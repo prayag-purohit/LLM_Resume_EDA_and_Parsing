@@ -41,14 +41,17 @@ sys.path.append('../libs')
 
 from libs.mongodb import get_all_file_ids,_get_mongo_client ,get_document_by_fileid, _clean_raw_llm_response
 from libs.gemini_processor import GeminiProcessor
+from libs.text_editor_app import TextEditorDialog # Custom class for text editor - company research
+from PySide6.QtWidgets import QApplication # For the text editor dialog
 from utils import get_logger
 import json
+import copy # Helper, to create deep copies
 import datetime
-import random
+import random # for treatment randomization
 import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
-import argparse
+from sklearn.metrics.pairwise import cosine_similarity # Calculate distance between two vectors (sets of words)
+from sentence_transformers import SentenceTransformer # Local model to calculate the distance
+import argparse # To enter the command line arguments
 
 logger = get_logger(__name__)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -120,6 +123,17 @@ SIMILARITY_MODEL = SentenceTransformer(
     os.path.join(SCRIPT_DIR, "models", "all-MiniLM-L6-v2")
 )
 FOCUSED_SIMILARITY_THRESHOLD = 0.60
+
+############################ ------------ Helper Functions ------------ ############################
+
+def is_valid_resume_data(data: dict, label: str, treatment: str, file: str, retry_count: int) -> bool:
+    if not data or not isinstance(data, dict):
+        logger.error(f"Invalid {label} (not a dict) for treatment {treatment} in file {file} (attempt {retry_count + 1}).")
+        return False
+    if not data.get('resume_data') or not isinstance(data['resume_data'], dict):
+        logger.error(f"Missing or invalid 'resume_data' in {label} for treatment {treatment} in file {file} (attempt {retry_count + 1}).")
+        return False
+    return True
 
 def extract_rephrased_text(resume_data):
     text_parts = []
@@ -193,12 +207,109 @@ def _extract_company_name_list(source_resume_data):
         'company_location_pairs': company_locations
     }
 
+#old company research function, unused
 def company_research(source_resume_data ,company_research_model=company_research_model, company_research_prompt=company_research_prompt):
     company_name_list = _extract_company_name_list(source_resume_data=source_resume_data)
     company_research_prompt = company_research_prompt.replace('{company_names}', str(company_name_list))
     response = company_research_model.generate_content(prompt=company_research_prompt)
     llm_response = _clean_raw_llm_response(response.text)
     return llm_response
+
+def company_research_with_ui(source_resume_data ,company_research_model=company_research_model, company_research_prompt=company_research_prompt):
+    """
+    Performs company research, then opens a UI for validation and editing.
+    Allows the user to retry the generation or accept the result.
+    """
+    company_name_list = _extract_company_name_list(source_resume_data=source_resume_data)
+    final_prompt = company_research_prompt.replace('{company_names}', str(company_name_list))
+
+    while True: # This loop allows for retries
+        # 1. Generate the content using the LLM
+        raw_response = company_research_model.generate_content(prompt=final_prompt)
+        llm_response = _clean_raw_llm_response(raw_response.text)
+        llm_response_str = json.dumps(llm_response, indent=2)  # Convert to pretty JSON string for display
+        logger.info("Content generated. Opening editor for validation...")
+        
+        # This is used for the editor dialog
+        app = QApplication.instance() or QApplication(sys.argv) 
+        # 2. Open the editor window and wait for the user
+        editor = TextEditorDialog(initial_text=llm_response_str)
+        status, final_text = editor.run()
+
+        # 3. Handle the user's decision
+        if status == "accepted":
+            logger.info("Content accepted by user.")
+            # Validate the final text
+            try:
+                final_text = json.loads(final_text)  # Ensure it's valid JSON
+                logger.info("Final text is valid JSON. Returning the result.")
+                return final_text
+            except json.JSONDecodeError as e:
+                logger.error('Invalid JSON format in final text while company generation: {e}')
+                sys.exit(1)
+        elif status == "retry":
+            logger.info("User chose to retry. Regenerating company mappings")
+            continue # Go to the next iteration of the while loop
+        else: # 'cancelled'
+            logger.info("\ncompany mapping generation cancelled by user.")
+            sys.exit(1)
+
+def replace_companies(resume_data: dict,
+                      company_mappings: list[dict],
+                      treatment_type: str) -> dict:
+    """
+    Replaces each work_experience company with a corresponding similar company
+    based on the specified treatment_type ("Type_I", "Type_II", "Type_III").
+
+    Returns a new resume_data dict.
+    """
+    if not resume_data or not isinstance(resume_data, dict):
+        logger.error("Invalid resume_data provided. Expected a non-empty dictionary.")
+        return resume_data
+    if not company_mappings or not isinstance(company_mappings, list):
+        logger.error("Invalid company_mappings provided. Expected a non-empty list of dictionaries.")
+        return resume_data
+    logger.info(f"Starting company replacement with treatment: {treatment_type}")
+    logger.info(f"Number of companies in the original resume: {len(resume_data.get('resume_data', {}).get('work_experience', []))}")
+
+    # Build lookup dict: {lowercase_original: {type: replacement_name}}
+    lookup = {}
+    for entry in company_mappings:
+        orig = entry.get("Original_company")
+        if not orig:
+            logger.warning("Found an entry with no 'Original_company' field. Skipping.")
+            continue
+
+        similar_list = entry.get("Similar companies", [])
+        type_mapping = {}
+        for d in similar_list:
+            for k, v in d.items():
+                type_mapping[k] = v
+
+        if treatment_type not in type_mapping:
+            logger.warning(f"No '{treatment_type}' replacement found for '{orig}'. Skipping.")
+            continue
+
+        lookup[orig.lower()] = type_mapping[treatment_type]
+        logger.info(f"Mapped '{orig}' → '{type_mapping[treatment_type]}'")
+
+    # Deep copy to avoid modifying original
+    new_data = copy.deepcopy(resume_data)
+
+    replacements_done = 0
+    for exp in new_data.get("resume_data", {}).get("work_experience", []):
+        comp = exp.get("company", "")
+        repl = lookup.get(comp.lower())
+
+        if repl:
+            logger.info(f"Replacing company '{comp}' with '{repl}'")
+            exp["company"] = repl
+            replacements_done += 1
+        else:
+            logger.warning(f"No replacement found for company: '{comp}' (keeping original)")
+
+    logger.info(f"Company replacement complete. Total replacements made: {replacements_done}")
+    return new_data
 
 def select_and_prepare_treatments(
     cec_treatment_df: pd.DataFrame,
@@ -307,7 +418,7 @@ def select_and_prepare_treatments(
     logger.info(f"Successfully prepared 3 unique treatment prompts for the resume.")
     return treatment_prompts
 
-#=============================================================================================================================================================================
+############################ ------------ Main code ------------ ############################
 
 # 1. Import all files from the source collection for the specified sector
 if args.files:
@@ -367,6 +478,7 @@ for file in sector_files[0:5]:
             control_refiner_prompt=control_refiner_prompt
         )
         
+        
         control_resume_target_collection = {
                 **common_metadata, # Add the common data
                 "document_id": f"{file}_control",
@@ -381,12 +493,6 @@ for file in sector_files[0:5]:
         }
         documents_to_save.append(control_resume_target_collection)
 
-        # Give a list of new companies in the base treatment_prompt. The new companies would be used in the same order. 
-        company_name_list = company_research(
-            source_resume_data=source_resume_data,
-        )
-        print(company_name_list)
-        treatment_prompt = treatment_prompt.replace('{company_names_list}', str(company_name_list))
 
         treatment_prompts = select_and_prepare_treatments(
             cec_treatment_df,
@@ -395,9 +501,16 @@ for file in sector_files[0:5]:
             treatment_prompt_template=treatment_prompt,
             style_modifiers=STYLE_MODIFIERS
         )
+
         if not treatment_prompts:
             logger.error(f"No treatments available for file {file}. stopping flow")
             sys.exit(1)
+
+        #Prepare a company name list for the source resume data. A pop up window will open to allow the user to validate and edit the company names.
+        logger.info(f"Preparing company mappings for file {file}.")
+        company_mappings = company_research_with_ui(
+            source_resume_data=source_resume_data
+        )
 
     except Exception as e:
         logger.error(f"Error in the control generation, or prompt generation for {file}: {e}")
@@ -419,10 +532,19 @@ for file in sector_files[0:5]:
                 # Clean the raw response
                 treated_resume_data = _clean_raw_llm_response(response.text)
                 # Validate the rephrasing with cosine similarity
-                focused_similarity_score = calculate_focused_similarity(
-                    source_resume_data['resume_data'], treated_resume_data['resume_data']
-                )
+                if not is_valid_resume_data(treated_resume_data, "treated resume", key, file, retry_count):
+                    retry_count += 1
+                    logger.error(f"The model returned invalid treated resume data for {file}_{key}")
+                    continue
+                if not is_valid_resume_data(source_resume_data, "source resume", key, file, retry_count):
+                    retry_count += 1
+                    logger.error(f"The source resume data seems corrupted for {file}")
+                    next
                 try:
+                    focused_similarity_score = calculate_focused_similarity(
+                        source_resume_data['resume_data'], treated_resume_data['resume_data']
+                    )
+                
                     focused_similarity_score = float(focused_similarity_score)
                     ########## FOR DEBUGGING AND SIMILARITY TEST
                     if focused_similarity_score < 0.8:
@@ -437,10 +559,18 @@ for file in sector_files[0:5]:
                 else:
                     logger.warning(f"Low similarity score ({focused_similarity_score}) for treatment {key} with style guide: {value['style_guide']} in file {file} (attempt {retry_count+1}). Retrying...")
                     retry_count += 1
+                    
             if focused_similarity_score < FOCUSED_SIMILARITY_THRESHOLD:
                 logger.error(f"Failed to achieve desired similarity score for treatment {key} in file {file} after {MAX_RETRIES} attempts.")
                 error_files.append(file)
                 break
+
+            treated_resume_data = replace_companies(
+                resume_data=treated_resume_data,
+                company_mappings=company_mappings,
+                treatment_type=key
+            )
+
             final_doc_for_this_version = {
                 **common_metadata, # Add the common data
                 "document_id": f"{file.replace('.pdf', '')}_{key}",
@@ -452,7 +582,6 @@ for file in sector_files[0:5]:
                 },
                 "style_guide": value['style_guide'],
                 "treatment_applied": value['treatment_applied'],
-                "company_name_list": company_name_list,
                 "resume_data": treated_resume_data
             }
             documents_to_save.append(final_doc_for_this_version)
