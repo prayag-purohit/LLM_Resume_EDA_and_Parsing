@@ -10,3 +10,5 @@ Exported_resumes/*
 */data/*
 models
 *.txt
+adhoc_analysis/industry_label_analysis/output/*
+
