@@ -10,5 +10,8 @@ Exported_resumes/*
 */data/*
 models
 *.txt
-adhoc_analysis/industry_label_analysis/output/*
+Phase 2.1 Workflow - Job Matching/test_results/*
+Adhoc analysis/industry_label_analysis/output/*
+Phase 2.1 Workflow - Job Matching/data/*
+
 
