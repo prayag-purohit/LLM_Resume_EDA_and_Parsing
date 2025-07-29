@@ -39,6 +39,11 @@ import os
 sys.path.append('..')
 sys.path.append('../libs')
 
+
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from libs.mongodb import get_all_file_ids,_get_mongo_client ,get_document_by_fileid, _clean_raw_llm_response
 from libs.gemini_processor import GeminiProcessor
 from libs.text_editor_app import TextEditorDialog # Custom class for text editor - company research

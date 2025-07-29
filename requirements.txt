@@ -13,4 +13,4 @@ openpyxl==3.1.5
 scikit-learn==1.7.0
 scipy==1.16.0
 torch==2.7.1
-tcl==0.2
+python-jobspy==0.0.1
