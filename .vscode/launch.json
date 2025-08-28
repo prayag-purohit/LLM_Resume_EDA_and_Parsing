@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/Phase 2 Workflow/treatment_generation.py",
+            "console": "integratedTerminal",
+            "args": ["--sector", "ITC", "--files", "ITC resume 16.pdf"]
+        }
+    ]
+}
